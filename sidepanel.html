@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>CodeBridge · Nexo y diagnóstico local</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="wallpaper" aria-hidden="true"></div>
+<div class="app">
+  <header class="topbar glass">
+    <div class="brand-mark" aria-hidden="true">{<span>/</span>}</div>
+    <div class="brand-copy"><strong>CodeBridge<span class="title-dot">.</span></strong><small>Código en contexto · v0.9</small></div>
+    <span class="version-pill">LOCAL</span>
+  </header>
+  <main>
+    <section class="hero glass">
+      <span class="eyebrow"><i class="small-dot"></i> INTEGRACIÓN CON WHATSAPP WEB</span>
+      <h1>Tu código, como <em>debe verse.</em></h1>
+      <p>Pega el código directamente en WhatsApp. CodeBridge lo identifica y lo convierte en una tarjeta seleccionable, sin modificar el mensaje enviado.</p>
+      <div class="flow-steps"><span>VS Code</span><b>→</b><span>WhatsApp</span><b>→</b><span>CodeBridge</span></div>
+      <div class="activation-actions"><button type="button" class="button button-primary" id="activate-wa">Activar en WhatsApp</button><button type="button" class="button button-secondary" id="deactivate-wa">Desactivar</button></div>
+      <div class="integration-state" id="integration-state" role="status">Comprobando integración…</div>
+    </section>
+
+    <section class="glass settings-panel" aria-labelledby="appearance-title">
+      <div class="section-heading"><div><span class="eyebrow">PERSONALIZA TU EXPERIENCIA</span><h2 id="appearance-title">A tu manera<span class="title-dot">.</span></h2><p>Apariencia inspirada en Nexo Facturación.</p></div><span class="heading-icon" aria-hidden="true">✦</span></div>
+      <fieldset class="appearance-choice"><legend>Elige tu luz</legend><div class="mode-options" id="mode-options">
+        <label class="mode-option"><input type="radio" name="ui-mode" value="light"><span class="mode-tile mode-tile-light" aria-hidden="true"><i></i><i></i></span><span>Claro</span></label>
+        <label class="mode-option"><input type="radio" name="ui-mode" value="dark"><span class="mode-tile mode-tile-dark" aria-hidden="true"><i></i><i></i></span><span>Oscuro</span></label>
+        <label class="mode-option"><input type="radio" name="ui-mode" value="auto"><span class="mode-tile mode-tile-auto" aria-hidden="true"><i></i><i></i></span><span>Sistema</span></label>
+      </div></fieldset>
+      <fieldset class="performance-choice" aria-labelledby="performance-title">
+        <legend id="performance-title">Perfil de rendimiento</legend>
+        <div class="performance-options">
+          <label class="performance-option"><input type="radio" name="performance-profile" value="balanced" checked><span><strong>Equilibrado</strong><small>Colores de sintaxis y cristal Nexo</small></span></label>
+          <label class="performance-option"><input type="radio" name="performance-profile" value="low"><span><strong>Low Mode</strong><small>Texto puro, sin desenfoque ni tokenización; menor uso de recursos</small></span></label>
+        </div>
+        <p class="setting-hint">El código conserva la selección y copia exacta en ambos perfiles. Low Mode no aplica resaltado de sintaxis.</p>
+      </fieldset>
+      <div class="control-group">
+        <label for="theme">Tema del código</label>
+        <select id="theme">
+          <option value="dark-plus">VS Code · Dark+</option>
+          <option value="light-plus">VS Code · Light+</option>
+          <option value="github-dark">GitHub Dark</option>
+          <option value="github-light">GitHub Light</option>
+          <option value="one-dark-pro">One Dark Pro</option>
+          <option value="dracula">Dracula</option>
+        </select>
+      </div>
+      <div class="range-grid">
+        <label class="range-group" for="font-size"><span>Tamaño del código <output id="font-value" for="font-size">13 px</output></span><input id="font-size" type="range" min="11" max="17" step="1" value="13"></label>
+        <label class="range-group" for="max-height"><span>Altura de tarjeta <output id="height-value" for="max-height">420 px</output></span><input id="max-height" type="range" min="260" max="700" step="20" value="420"></label>
+      </div>
+      <div class="glass-controls" aria-labelledby="glass-title">
+        <div class="glass-heading"><div><strong id="glass-title">Cristal Nexo</strong><small>Transparencia y desenfoque, a tu gusto.</small></div><span class="glass-emblem" aria-hidden="true">✧</span></div>
+        <div class="glass-demo" aria-hidden="true"><div class="glass-demo-orb"></div><div class="glass-demo-card"><i></i><span></span><span></span></div></div>
+        <div class="range-grid glass-ranges">
+          <label class="range-group" for="glass-blur"><span>Desenfoque <output id="blur-value" for="glass-blur">18 px</output></span><input id="glass-blur" type="range" min="0" max="30" step="2" value="18"></label>
+          <label class="range-group" for="glass-opacity"><span>Opacidad <output id="opacity-value" for="glass-opacity">75 %</output></span><input id="glass-opacity" type="range" min="55" max="95" step="5" value="75"></label>
+        </div>
+        <label class="toggle glass-chat-switch"><input type="checkbox" id="glass-cards" checked><span>Aplicar efecto vidrio a las tarjetas del chat</span></label>
+        <p class="setting-hint">Con más de 35 tarjetas activas, se desactiva el vidrio. Low Mode también lo desactiva y reduce el trabajo de renderizado.</p>
+      </div>
+      <div class="toggles">
+        <label class="toggle"><input type="checkbox" id="line-numbers" checked><span>Numeración de líneas</span></label>
+        <label class="toggle"><input type="checkbox" id="wrap"><span>Ajustar líneas largas</span></label>
+      </div>
+      <div class="preview-heading"><div><strong>Vista previa</strong><small id="preview-filename">Factura.java</small></div><select id="preview-language" aria-label="Lenguaje de vista previa"><option value="java">Java</option><option value="asm">NASM / x86-64</option></select></div>
+      <div class="editor-frame" id="preview-frame"><div class="editor-title"><span class="file-badge" id="preview-badge">J</span><strong id="preview-title">Factura.java</strong><span class="language-chip" id="preview-chip">JAVA</span></div><div class="preview" id="preview"></div></div>
+      <button type="button" id="reset-settings" class="button button-ghost">Restaurar apariencia</button>
+    </section>
+    <section class="glass diagnostics-panel" aria-labelledby="diagnostics-title">
+      <div class="section-heading"><div><span class="eyebrow">SIN DATOS DE CONVERSACIONES</span><h2 id="diagnostics-title">Diagnóstico local<span class="title-dot">.</span></h2><p>Mediciones de esta pestaña, solo mientras permanezca abierta.</p></div><span class="heading-icon" aria-hidden="true">◴</span></div>
+      <p class="diagnostic-state" id="diagnostic-state" role="status" aria-live="polite">Consulta las métricas cuando lo necesites.</p>
+      <div class="diagnostic-grid" aria-label="Indicadores de rendimiento">
+        <div><span>Tarjetas activas</span><strong id="diag-cards">—</strong></div>
+        <div><span>Mensajes revisados</span><strong id="diag-inspected">—</strong></div>
+        <div><span>Render promedio</span><strong id="diag-render">—</strong></div>
+        <div><span>Render p95</span><strong id="diag-p95">—</strong></div>
+        <div><span>Cola pendiente</span><strong id="diag-pending">—</strong></div>
+        <div><span>Fallos del visor</span><strong id="diag-errors">—</strong></div>
+      </div>
+      <div class="diagnostic-actions"><button class="button button-primary" id="diag-refresh" type="button">Actualizar métricas</button><button class="button button-secondary" id="diag-copy" type="button" disabled>Copiar informe</button><button class="button button-ghost" id="diag-reset" type="button" disabled>Reiniciar contadores</button></div>
+      <p class="setting-hint">No mide CPU ni RAM del sistema: muestra tiempos de renderizado y carga del visor. No guarda ni exporta textos, nombres de contactos, chats o código fuente. El informe solo se copia si pulsas el botón.</p>
+    </section>
+    <section class="glass privacy-panel"><div class="section-heading"><h2>Privacidad por diseño</h2><span aria-hidden="true">⌁</span></div><p>CodeBridge funciona en tu navegador. No envía código a servidores propios ni modifica lo que escribes o envías. El receptor necesita CodeBridge para ver los colores.</p></section>
+  </main>
+  <footer><span>CodeBridge es independiente de Meta y WhatsApp.</span><span id="status" role="status" aria-live="polite"></span></footer>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
