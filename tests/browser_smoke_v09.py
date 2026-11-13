@@ -69,7 +69,7 @@ with sync_playwright() as p:
         permissions:{request:async()=>true}};
       Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async x=>window.__clipboard=x}});
     }''')
-    js='\n'.join(re.sub(r'^export\s+', '',re.sub(r'^import\s+.*?;\s*$', '',(ROOT/name).read_text(encoding='utf-8'),flags=re.MULTILINE),flags=re.MULTILINE) for name in ['core.js','visual.js','highlight.js','app.js'])
+    js='\n'.join(re.sub(r'^export\s+', '',re.sub(r'^import\s+.*?;\s*$', '',(ROOT/name).read_text(encoding='utf-8'),flags=re.MULTILINE),flags=re.MULTILINE) for name in ['core.js','visual.js','highlight.js','message.js','smart-clipboard.js','app.js'])
     panel.add_script_tag(content=js)
     panel.wait_for_function('document.querySelector("#diag-cards").textContent==="5"')
     assert panel.locator('#diag-render').inner_text()=='3.25 ms'

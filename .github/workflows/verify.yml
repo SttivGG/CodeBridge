@@ -18,3 +18,20 @@ jobs:
         run: git diff --exit-code -- whatsapp.js
       - name: Validar scripts Python
         run: python -m compileall -q tests
+  browser-smoke:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar Playwright y navegador Chromium de prueba
+        run: |
+          python -m pip install 'playwright>=1.50,<2'
+          python -m playwright install --with-deps chromium
+      - name: Smoke test de compatibilidad en Chromium
+        env:
+          CB_BROWSER_CHANNELS: chromium
+        run: python tests/browser_compat_v092.py

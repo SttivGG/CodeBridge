@@ -7,7 +7,20 @@ export const MAX_CHAT_TEXT = 65536; // Maximum CodeBridge native message length;
 function supportedCodeStructure(s, language) {
   const shared = /[{};=<>()[\]]/;
   switch (language) {
-    case 'python': return /^\s*(def |class |from |import |async def |for |if )/m.test(s) && /[:=(]/.test(s);
+    case 'mongodb': return /^\s*db\.(?:[A-Za-z_$][\w$]*|getCollection\s*\()/m.test(s) && /\b(?:aggregate|find|findOne|insertOne|insertMany|updateOne|updateMany|deleteOne|deleteMany|countDocuments|distinct|bulkWrite|createIndex|watch)\s*\(/.test(s) ||
+      (/(?:\$match|\$project|\$group|\$sort|\$and|\$or)\b/.test(s) && /[{}\[\]]/.test(s));
+    case 'java': {
+      const lines=s.split('\n').map(line=>line.trim()).filter(Boolean);
+      if (lines.length && lines.every(line=>/^(?:import\s+(?:static\s+)?[A-Za-z_$][\w$]*(?:\.[A-Za-z_$*][\w$*]*)+|package\s+[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*;$/.test(line))) return true;
+      return shared.test(s) && (/[;{}()]/.test(s) || /=>/.test(s));
+    }
+    case 'python': {
+      const lines=s.split('\n').map(line=>line.trim()).filter(Boolean);
+      const importLine=/^(?:from\s+[A-Za-z_][\w.]*\s+import\s+[A-Za-z_*][\w*, ]*|import\s+[A-Za-z_][\w.]*(?:\s+as\s+\w+)?(?:\s*,\s*[A-Za-z_][\w.]*)*)$/;
+      if (lines.length && lines.every(line=>importLine.test(line))) return true;
+      return /^\s*(?:def |class |from |import |async def |for |if )/m.test(s) && /[:=(]/.test(s) ||
+        /\b(?:Flask\s*\(\s*__name__|MongoClient\s*\(|redis\.Redis\s*\()/.test(s);
+    }
     case 'sql': return /\b(SELECT|INSERT|CREATE|UPDATE|DELETE|ALTER)\b/i.test(s) && /\b(FROM|INTO|TABLE|SET|WHERE|VALUES)\b/i.test(s);
     case 'html': return /<\/?[a-z][\s\S]*?>/i.test(s);
     case 'css': return /\{[^{}]*:[^{}]*[;}]/.test(s);
@@ -47,7 +60,7 @@ export function recognizeChatCode(message) {
   // the fence in the visual DOM; in that case detection continues as plain text.
   const fence = input.match(/^```(?:([a-zA-Z+#.0-9]+)\n)?([\s\S]*?)```$/);
   if (fence && fence[2].trim()) {
-    const code = fence[2].replace(/^\n|\n$/g,'');
+    const code = fence[2];
     const guess = detectLanguage(code);
     return {code,language:guess.language,filename:'',source:'fenced'};
   }
@@ -64,6 +77,12 @@ export function recognizeChatCode(message) {
     /\b(?:SELECT|INSERT|UPDATE|CREATE)\b/i.test(input) && /\b(?:FROM|INTO|SET|TABLE)\b/i.test(input) ||
     /^\s*<\w+\b/.test(input) && /<\/\w+>/.test(input)
   );
-  if (!strongSingleLine && (lineCount < 2 || (guess.language !== 'asm' && structuralLines < 1))) return null;
+  const isolatedImport = (guess.language === 'java' && /^\s*(?:import\s+(?:static\s+)?[\w$]+(?:\.[\w$*]+)+|package\s+[\w$]+(?:\.[\w$]+)*)\s*;\s*$/.test(input)) ||
+    (guess.language === 'python' && /^\s*(?:from\s+[\w.]+\s+import\s+[\w*, ]+|import\s+[\w.]+(?:\s+as\s+\w+)?)\s*$/.test(input));
+  const singleMongo = guess.language === 'mongodb' && ( 
+    /^db\.[\w$]+\.(?:aggregate|find|findOne|insertOne|insertMany|updateOne|updateMany|deleteOne|deleteMany|countDocuments|distinct|bulkWrite|createIndex|watch)\s*\([\s\S]+\)$/.test(input) ||
+    /^\[\s*\{\s*\$(?:match|project|group|sort)\s*:/.test(input) && (input.match(/\$(?:match|project|group|sort|and|or|gt|gte|lt|lte)\b/g)||[]).length >= 2
+  );
+  if (!strongSingleLine && !singleMongo && !isolatedImport && (lineCount < 2 || (guess.language !== 'asm' && guess.language !== 'python' && structuralLines < 1))) return null;
   return {code:original,language:guess.language,filename:'',source:'native'};
 }

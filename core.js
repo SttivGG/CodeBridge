@@ -1,9 +1,9 @@
 /** CodeBridge protocol v1, no dependencies. All operations remain on device. */
-export const LANGUAGES = Object.freeze(['java','javascript','typescript','python','json','sql','html','css','bash','go','rust','csharp','cpp','php','kotlin','asm','text']);
+export const LANGUAGES = Object.freeze(['java','javascript','typescript','python','json','sql','html','css','bash','go','rust','csharp','cpp','php','kotlin','asm','mongodb','text']);
 export const THEMES = Object.freeze(['dark-plus','light-plus','github-dark','github-light','one-dark-pro','dracula']);
 export const MAX_CODE_LENGTH = 12000;
 export const MAX_FILENAME_LENGTH = 100;
-const SUFFIXES = {java:'java',js:'javascript',jsx:'javascript',ts:'typescript',tsx:'typescript',py:'python',json:'json',sql:'sql',html:'html',htm:'html',css:'css',sh:'bash',bash:'bash',go:'go',rs:'rust',cs:'csharp',cpp:'cpp',cc:'cpp',cxx:'cpp',hpp:'cpp',php:'php',kt:'kotlin',kts:'kotlin',asm:'asm',nasm:'asm',s:'asm'};
+const SUFFIXES = {java:'java',js:'javascript',jsx:'javascript',ts:'typescript',tsx:'typescript',py:'python',json:'json',sql:'sql',html:'html',htm:'html',css:'css',sh:'bash',bash:'bash',go:'go',rs:'rust',cs:'csharp',cpp:'cpp',cc:'cpp',cxx:'cpp',hpp:'cpp',php:'php',kt:'kotlin',kts:'kotlin',asm:'asm',nasm:'asm',s:'asm',mongo:'mongodb',mongodb:'mongodb'};
 export function normalizeNewlines(text) { return String(text).replace(/\r\n?/g, '\n'); }
 export function detectLanguage(code, filename = '') {
   const ext = filename.trim().split('.').at(-1)?.toLowerCase() || '';
@@ -19,6 +19,22 @@ export function detectLanguage(code, filename = '') {
   if ((nasmSections.test(s) && (nasmDirectives.test(s) || instructionLines >= 1)) ||
       (instructionLines >= 2 && /\b(?:rax|rbx|rcx|rdx|rsi|rdi|rsp|rbp|eax|ebx|ecx|edx|xmm\d+|0x[\da-f]+)\b/i.test(s))) {
     return {language:'asm',confidence:'alta',reason:'Directivas o instrucciones NASM/x86'};
+  }
+  // Mongo shell queries and aggregation pipelines are JavaScript-like, but
+  // ordinary JavaScript heuristics miss db.collection.aggregate([ ... ]).
+  const mongoShell = /^\s*db\.(?:[A-Za-z_$][\w$]*|getCollection\s*\(\s*['\"][^'\"]+['\"]\s*\))\s*\.\s*(?:aggregate|find|findOne|insertOne|insertMany|updateOne|updateMany|deleteOne|deleteMany|countDocuments|distinct|bulkWrite|createIndex|watch)\s*\(/m;
+  const mongoOps = (s.match(/\$(?:match|project|group|sort|limit|unwind|lookup|and|or|gt|gte|lt|lte|in|set|sum|avg)\b/g) || []).length;
+  if (mongoShell.test(s) || (mongoOps >= 2 && /[\[{]\s*\$[A-Za-z]+\s*:/.test(s))) {
+    return {language:'mongodb',confidence:'alta',reason:'Consulta MongoDB / aggregation pipeline'};
+  }
+  // Java package/import snippets have no braces and may contain only imports.
+  if (/^\s*(?:import\s+(?:static\s+)?[A-Za-z_$][\w$]*(?:\.[A-Za-z_$*][\w$*]*)+\s*;|package\s+[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\s*;)\s*$/m.test(s)) {
+    return {language:'java',confidence:'alta',reason:'Importación o paquete Java'};
+  }
+  // Python code often arrives as isolated imports or Flask/PyMongo/Redis setup.
+  if (/^\s*(?:from\s+[A-Za-z_][\w.]*(?:\s+import\s+[\w*, ]+)|import\s+[A-Za-z_][\w.]*(?:\s+as\s+\w+)?(?:\s*,\s*[A-Za-z_][\w.]*)*)\s*$/m.test(s) ||
+      /\b(?:Flask\s*\(\s*__name__|MongoClient\s*\(|redis\.Redis\s*\(|__name__\s*==\s*['\"]__main__['\"])/.test(s)) {
+    return {language:'python',confidence:'alta',reason:'Importación o inicialización Python'};
   }
   const rules = [
     ['java', /\b(public\s+record|BigDecimal|List\.copyOf|System\.out|import\s+java\.|Instant\s+\w+|LocalDate\s+\w+|public\s+(static\s+)?class|@Override)\b/, 'alta','Constructos Java'],

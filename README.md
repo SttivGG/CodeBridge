@@ -1,115 +1,56 @@
-# CodeBridge v0.9 — Diagnóstico local, estabilidad y Low Mode
+# CodeBridge 1.0 RC1 (versión técnica 0.9.7)
 
-CodeBridge es una extensión local para **Chrome y Edge** que presenta fragmentos de código de los mensajes de WhatsApp Web como tarjetas **seleccionables, copiables y con opción «Ver original»**. No modifica el texto que WhatsApp transporta, no intercepta Ctrl+V ni ejecuta código recibido.
+**Candidata de publicación para pruebas privadas; aún no es una versión pública aprobada.**
 
-**Estado:** se verificaron **44 pruebas unitarias** y **seis suites de navegador en Chromium** con conversaciones simuladas (v0.4–v0.8). La v0.9 **no ha sido probada todavía en una sesión real de WhatsApp Web**, ni en Edge. No constituye una certificación de seguridad.
+CodeBridge es una extensión independiente para navegadores Chromium que mejora la **visualización local** de código en WhatsApp Web, conservando selección, copia, resaltado por lenguaje y modo de bajo consumo (Low Mode). También permite preparar **bajo petición** código copiado desde cualquier editor mediante Smart Clipboard. **No está afiliada, aprobada ni respaldada por WhatsApp o Meta.**
 
-## Novedades v0.9 — diagnóstico local
+## Descargas
 
-- Nuevo panel de **Diagnóstico local** integrado en la interfaz Nexo, con tarjetas activas, mensajes revisados, fallos, cola pendiente, tiempo medio de renderizado y percentil 95.
-- Botones **Actualizar métricas**, **Copiar informe** y **Reiniciar contadores**.
-- Los datos se mantienen exclusivamente en la memoria de la pestaña, no contienen textos, identificadores ni código, y no se envían a servidores.
-- El informe JSON se copia al portapapeles únicamente por acción del usuario.
-- Contadores y muestras acotadas a 128 tiempos recientes; el sistema de diagnóstico no crece indefinidamente con los mensajes.
-- La v0.9 recupera de forma segura una burbuja ante fallos de procesamiento, dejando WhatsApp operativo.
-- Mantiene ambos perfiles (**Equilibrado** y **Low Mode**), glassmorphism opcional, soporte de NASM, mensajes largos y botones de copia.
-- Se conservan las 41 pruebas existentes, añadiendo 3 pruebas unitarias de diagnóstico y una sexta suite Chromium. Se incluye un benchmark reproducible con un chat simulado.
+- `CodeBridge_1.0_RC1_EXTENSION.zip`: paquete mínimo de ejecución, listo para cargar descomprimido o evaluar para tiendas; no contiene pruebas ni capturas de conversaciones.
+- `CodeBridge_1.0_RC1_FUENTES.zip`: código fuente completo, pruebas, documentos y scripts reproducibles.
 
-### Lo que **no** miden las estadísticas
+El número técnico en `manifest.json` es `0.9.7`; `version_name` muestra «1.0 RC1». El paquete npm usa `1.0.0-rc.1`. El panel consulta `chrome.runtime.getManifest()` y muestra `v0.9.7` sin etiquetas desactualizadas.
 
-No miden directamente CPU ni RAM del computador. Los tiempos miden el trabajo del visor, no el rendimiento global de WhatsApp. Más detalles: [Diagnóstico local v0.9](docs/DIAGNOSTICO_LOCAL_V09.md).
+## Instalación de prueba
 
-## Funcionalidades heredadas de v0.8
+1. Desactiva todas las instalaciones previas de CodeBridge en la página de extensiones de tu navegador.
+2. Extrae `CodeBridge_1.0_RC1_EXTENSION.zip` en una carpeta propia.
+3. Abre `chrome://extensions` (o `edge://extensions`, `brave://extensions`), activa modo desarrollador y carga la carpeta descomprimida.
+4. Abre el panel, comprueba versión `v0.9.7`, lee la declaración de acceso y pulsa «Activar en WhatsApp» solo si estás de acuerdo.
+5. Recarga WhatsApp Web. Para fragmentos con guiones bajos u otros símbolos de formato, usa «Preparar portapapeles» **una vez por fragmento** antes de pegar.
+6. Prueba el contenido en el receptor con «Copiar código»; compara el original carácter a carácter.
 
-### Perfil de rendimiento configurable
+No se intercepta el evento Ctrl+V ni se altera directamente el campo de composición de WhatsApp. El código no se ejecuta. El motor de resaltado continúa siendo local y simplificado (no Shiki).
 
-- **Equilibrado (por defecto):** resaltado local de sintaxis, numeración opcional, temas de VS Code y el vidrio Nexo configurable de v0.7.
-- **Low Mode:** conserva lectura, selección, desplazamiento y copia del texto original, pero desactiva **tokenización y colores por token**, numeración, transparencia/desenfoque de las tarjetas y transiciones. Muestra un único nodo de texto de código por tarjeta. Utiliza lotes más pequeños para no ocupar demasiado tiempo el hilo principal.
-- En Low Mode el panel también desactiva filtros de vidrio y animaciones. Los controles visuales incompatibles quedan deshabilitados temporalmente; las preferencias de Equilibrado se conservan para cuando vuelvas.
-- El perfil queda guardado **localmente** mediante `chrome.storage.local`, sin almacenar el contenido de los chats.
+## Privacidad y seguridad
 
-### Seguridad e integridad
+- El permiso para `web.whatsapp.com` es opcional y se pide explícitamente al activar la integración.
+- El permiso `clipboardRead` se solicita por separado al pulsar «Preparar portapapeles»; se puede revocar en el panel.
+- Los fragmentos procesados no se envían a servidores de CodeBridge. Se usan en memoria para renderizar y copiar, no se guardan en preferencias.
+- Los diagnósticos registran **solo indicadores agregados**; no guardan texto de mensajes, nombres de contactos ni código.
+- El usuario controla los mensajes enviados por WhatsApp: no hay envío automático.
 
-- Sigue construyendo la interfaz con `textContent` y nodos DOM, **nunca con HTML no confiable ni ejecución de fragmentos**.
-- Ante código que exceda **65.536 caracteres** CodeBridge no intenta renderizarlo: WhatsApp muestra el mensaje original, sin tarjeta incompleta. Este es un límite interno de la extensión y no el de WhatsApp.
-- Señales no intrusivas para controles bidireccionales, caracteres invisibles y controles no imprimibles. El texto **nunca se reescribe**.
-- Se conserva la expansión conservadora de «Leer más» y los mensajes normales no se transforman.
-- La fuente de verdad para **Copiar código** es el texto leído del mensaje; nunca una imagen.
+Consulta [POLITICA_PRIVACIDAD.md](release/POLITICA_PRIVACIDAD.md) para el borrador de publicación. **Falta designar un contacto de privacidad real antes del lanzamiento.**
 
-### Rendimiento y estabilidad
-
-- Una única hoja de estilos constructible reutilizada entre los Shadow DOM, con alternativa por compatibilidad.
-- Actualizar desenfoque, opacidad, apariencia, tamaño de letra o altura **no vuelve a tokenizar** ni reconstruir las tarjetas.
-- Limpieza de referencias cuando WhatsApp elimina mensajes del DOM; cancelación de temporizadores al desactivar.
-- Desenfoque adaptativo sin recorridos de todas las tarjetas en cada nuevo mensaje.
-- En el arranque se cargan las preferencias **antes del primer análisis del chat**.
-
-## Instalación (sin Node.js ni Docker)
-
-1. Desactiva y elimina de tu navegador la versión anterior de CodeBridge, especialmente si es v0.8. No mantengas varias versiones activas.
-2. Descarga y **descomprime** el ZIP de v0.9 en una carpeta permanente.
-3. Abre `chrome://extensions` o `edge://extensions`, activa **Modo desarrollador** y elige **Cargar descomprimida**.
-4. Selecciona la carpeta `CodeBridge_v0.9`, donde se encuentra `manifest.json`.
-5. Abre el panel lateral de CodeBridge y pulsa **Activar en WhatsApp**. Concede acceso únicamente a `https://web.whatsapp.com/*`.
-6. Recarga WhatsApp Web. Desde el panel, elige **Equilibrado** o **Low Mode**.
-
-## Prueba recomendada con dos personas
-
-1. Ambos usuarios instalan la **misma v0.9**, la activan y recargan WhatsApp Web.
-2. Desde VS Code, envía por WhatsApp el archivo de prueba `tests/fixtures/hola_mundo.asm` o un fragmento Java. No lo pegues antes en el panel.
-3. Verifica que tanto el remitente como el receptor pueden **Copiar código** y **Ver original**, y que las líneas y espacios se conservan en el texto accesible en WhatsApp.
-4. Cambia a **Low Mode** y confirma que desaparecen los colores por token y el cristal, pero el texto aún puede seleccionarse y copiarse.
-5. Envía un bloque largo que active «Leer más». Comprueba que aparece una tarjeta completa tras expandirse.
-6. Prueba mensajes de texto ordinario; deben quedar intactos.
-7. Comprueba la experiencia en Chrome y Edge. Registra navegador, versión, número de fragmentos, tiempos y errores.
-
-## Pruebas automatizadas
-
-El ZIP incluye el código fuente y los scripts. Para **desarrollo**, con Node.js 20+ y Python + Playwright/Chromium:
+## Verificación y distribución
 
 ```bash
-npm run verify
-python tests/browser_smoke_v04.py
-python tests/browser_smoke_v05.py
-python tests/browser_smoke_v06.py
-python tests/browser_smoke_v07.py
-python tests/browser_smoke_v08.py
-python tests/browser_smoke_v09.py
-python tests/benchmark_modes.py # opcional: resultados dependen del equipo
+npm run verify:release
+python tests/browser_no_duplicate_v0963.py
+python tests/browser_clipboard_recovery_v0964.py
+python tests/browser_smart_clipboard_v096.py
+python scripts/pack-release.py
 ```
 
-En una prueba sintética de Chromium, **Low Mode procesó 500 mensajes de ensamblador en ~2,65 segundos** en este entorno. Es un resultado de laboratorio, no una promesa de rendimiento en otros equipos ni una comparación estandarizada con Equilibrado.
+Requiere Node.js 20+, Python 3.11+ y Playwright con Chromium para pruebas de navegador. Las pruebas de Chromium usan **interfaces simuladas**; Chrome, Brave y Edge reales todavía necesitan validación manual. Al empaquetar, `pack-release.py` genera los dos ZIPs y sus hashes SHA-256.
 
-## Archivo y documentación
+## Lo que falta antes del lanzamiento público
 
-- `sidepanel.html`, `styles.css`, `app.js`: interfaz Nexo, perfil de rendimiento y diagnóstico numérico.
-- `visual.js`: validación de preferencias y cálculo de las opciones efectivas de cada perfil.
-- `core.js`, `message.js`, `expansion.js`: reconocimiento de código y «Leer más».
-- `highlight.js`: renderizado local y camino de texto puro para Low Mode.
-- `security.js`: avisos pasivos sobre caracteres potencialmente engañosos.
-- `diagnostics.js`: métricas en memoria y exportación numérica acotada.
-- `docs/DIAGNOSTICO_LOCAL_V09.md`: contrato de privacidad, pruebas, interpretación y límites de rendimiento.
-- `src/content-feature.js`: ciclo de vida, observación DOM, tarjetas, limpieza y optimización.
-- `whatsapp.js`: script clásico precompilado e instalable (generado con `npm run bundle:content`).
-- `docs/SEGURIDAD_Y_RENDIMIENTO_V08.md`: amenazas, salvaguardas, riesgos residuales y criterios de validación.
-- `docs/panel_diagnostico_v09.png`, `docs/panel_low_v08.png` y `docs/chat_low_v08.png`: capturas de pruebas en Chromium simulado.
+1. Pruebas en WhatsApp Web real entre dos usuarios, Chrome y Edge, con Python `__init__` / `__str__`, MongoDB, Java, NASM, mensajes largos y Low Mode.
+2. Definir la identidad legal del editor, un canal privado de soporte y la licencia del software y sus activos.
+3. Publicar una URL accesible para la política de privacidad y verificar que las declaraciones reflejan el paquete real.
+4. Revisión del cumplimiento con las condiciones de WhatsApp y las políticas de las tiendas, idealmente con asesoría jurídica.
+5. Realizar capturas de **la RC instalada**, sin datos personales ni mensajes reales de terceros, y completar las fichas de Chrome y Edge.
+6. Subir el código a una rama del repositorio y crear un tag de candidato **sin publicar ni reemplazar `main` automáticamente**.
 
-## Límites importantes
-
-- **Low Mode prioriza recursos por encima del resaltado.** No conserva colores de sintaxis, pero sí el formato de texto y sus controles de copia.
-- No puede recuperar los caracteres que WhatsApp haya modificado, comprimido o eliminado antes de mostrarlos en el DOM.
-- La detección automática es heurística; un lenguaje ambiguo puede quedar como texto normal.
-- La integración usa la estructura interna del DOM de WhatsApp Web. Puede romperse tras actualizaciones de WhatsApp.
-- Solo funciona en WhatsApp Web mediante navegadores compatibles. **No se instala dentro de la app oficial de Windows ni de las apps móviles.**
-- La extensión puede leer contenido visible de WhatsApp Web mientras está activada. No lo almacena como historial ni lo envía a servidores propios. Ese acceso implica responsabilidad: instala solo versiones en las que confíes.
-- No afiliada a Meta ni a WhatsApp. Una distribución pública requiere analizar las condiciones de uso y auditar de manera independiente.
-
-Referencia visual: [Nexo Facturación](https://github.com/SttivGG/Facturacion-hexagonal), utilizada por solicitud de su propietario. No se alteró ese repositorio ni se distribuyeron fuentes tipográficas de terceros.
-
-## Repositorio y política de publicación
-
-Repositorio principal: https://github.com/SttivGG/CodeBridge
-
-Este ZIP contiene el código fuente, la extensión instalable, pruebas y un workflow básico de CI. **No tiene licencia de software abierto establecida**: antes de aceptar contribuciones o distribuir comercialmente debe decidirse la licencia y comprobar las condiciones de terceros. No subir datos reales de conversaciones ni llaves de API.
-
-Para cargar el código en el repositorio nuevo, lee [Importar a GitHub](docs/IMPORTAR_A_GITHUB.md).
+Detalles y matriz de pruebas: [CHECKLIST_PUBLICACION.md](release/CHECKLIST_PUBLICACION.md). El repositorio conectado puede tener una versión anterior; estos paquetes no realizan cambios remotos.

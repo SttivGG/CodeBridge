@@ -1,11 +1,11 @@
 /* Generated with npm run bundle:content. Local-only. */
 (()=>{
 /** CodeBridge protocol v1, no dependencies. All operations remain on device. */
-const LANGUAGES = Object.freeze(['java','javascript','typescript','python','json','sql','html','css','bash','go','rust','csharp','cpp','php','kotlin','asm','text']);
+const LANGUAGES = Object.freeze(['java','javascript','typescript','python','json','sql','html','css','bash','go','rust','csharp','cpp','php','kotlin','asm','mongodb','text']);
 const THEMES = Object.freeze(['dark-plus','light-plus','github-dark','github-light','one-dark-pro','dracula']);
 const MAX_CODE_LENGTH = 12000;
 const MAX_FILENAME_LENGTH = 100;
-const SUFFIXES = {java:'java',js:'javascript',jsx:'javascript',ts:'typescript',tsx:'typescript',py:'python',json:'json',sql:'sql',html:'html',htm:'html',css:'css',sh:'bash',bash:'bash',go:'go',rs:'rust',cs:'csharp',cpp:'cpp',cc:'cpp',cxx:'cpp',hpp:'cpp',php:'php',kt:'kotlin',kts:'kotlin',asm:'asm',nasm:'asm',s:'asm'};
+const SUFFIXES = {java:'java',js:'javascript',jsx:'javascript',ts:'typescript',tsx:'typescript',py:'python',json:'json',sql:'sql',html:'html',htm:'html',css:'css',sh:'bash',bash:'bash',go:'go',rs:'rust',cs:'csharp',cpp:'cpp',cc:'cpp',cxx:'cpp',hpp:'cpp',php:'php',kt:'kotlin',kts:'kotlin',asm:'asm',nasm:'asm',s:'asm',mongo:'mongodb',mongodb:'mongodb'};
 function normalizeNewlines(text) { return String(text).replace(/\r\n?/g, '\n'); }
 function detectLanguage(code, filename = '') {
   const ext = filename.trim().split('.').at(-1)?.toLowerCase() || '';
@@ -21,6 +21,22 @@ function detectLanguage(code, filename = '') {
   if ((nasmSections.test(s) && (nasmDirectives.test(s) || instructionLines >= 1)) ||
       (instructionLines >= 2 && /\b(?:rax|rbx|rcx|rdx|rsi|rdi|rsp|rbp|eax|ebx|ecx|edx|xmm\d+|0x[\da-f]+)\b/i.test(s))) {
     return {language:'asm',confidence:'alta',reason:'Directivas o instrucciones NASM/x86'};
+  }
+  // Mongo shell queries and aggregation pipelines are JavaScript-like, but
+  // ordinary JavaScript heuristics miss db.collection.aggregate([ ... ]).
+  const mongoShell = /^\s*db\.(?:[A-Za-z_$][\w$]*|getCollection\s*\(\s*['\"][^'\"]+['\"]\s*\))\s*\.\s*(?:aggregate|find|findOne|insertOne|insertMany|updateOne|updateMany|deleteOne|deleteMany|countDocuments|distinct|bulkWrite|createIndex|watch)\s*\(/m;
+  const mongoOps = (s.match(/\$(?:match|project|group|sort|limit|unwind|lookup|and|or|gt|gte|lt|lte|in|set|sum|avg)\b/g) || []).length;
+  if (mongoShell.test(s) || (mongoOps >= 2 && /[\[{]\s*\$[A-Za-z]+\s*:/.test(s))) {
+    return {language:'mongodb',confidence:'alta',reason:'Consulta MongoDB / aggregation pipeline'};
+  }
+  // Java package/import snippets have no braces and may contain only imports.
+  if (/^\s*(?:import\s+(?:static\s+)?[A-Za-z_$][\w$]*(?:\.[A-Za-z_$*][\w$*]*)+\s*;|package\s+[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\s*;)\s*$/m.test(s)) {
+    return {language:'java',confidence:'alta',reason:'Importación o paquete Java'};
+  }
+  // Python code often arrives as isolated imports or Flask/PyMongo/Redis setup.
+  if (/^\s*(?:from\s+[A-Za-z_][\w.]*(?:\s+import\s+[\w*, ]+)|import\s+[A-Za-z_][\w.]*(?:\s+as\s+\w+)?(?:\s*,\s*[A-Za-z_][\w.]*)*)\s*$/m.test(s) ||
+      /\b(?:Flask\s*\(\s*__name__|MongoClient\s*\(|redis\.Redis\s*\(|__name__\s*==\s*['\"]__main__['\"])/.test(s)) {
+    return {language:'python',confidence:'alta',reason:'Importación o inicialización Python'};
   }
   const rules = [
     ['java', /\b(public\s+record|BigDecimal|List\.copyOf|System\.out|import\s+java\.|Instant\s+\w+|LocalDate\s+\w+|public\s+(static\s+)?class|@Override)\b/, 'alta','Constructos Java'],
@@ -74,7 +90,7 @@ function makeMonospace(code) {
 
 // Pure appearance validation. Shared by the panel and isolated chat content script.
 const DEFAULT_PREFERENCES=Object.freeze({
-  uiMode:'auto',performanceProfile:'balanced',theme:'dark-plus',lineNumbers:true,wrap:false,fontSize:13,maxHeight:420,glassBlur:18,glassOpacity:75,glassCards:true
+  uiMode:'auto',performanceProfile:'balanced',theme:'dark-plus',lineNumbers:true,wrap:false,fontSize:13,maxHeight:420,glassBlur:18,glassOpacity:75,glassCards:true,safePaste:true
 });
 const VISUAL_THEMES=new Set(['dark-plus','light-plus','github-dark','github-light','one-dark-pro','dracula']);
 function resolveUiMode(mode,systemDark=false){return mode==='light'||mode==='dark'?mode:systemDark?'dark':'light';}
@@ -91,7 +107,8 @@ function normalizePreferences(raw={}){
     maxHeight:bounded(v.maxHeight,260,700,20,DEFAULT_PREFERENCES.maxHeight),
     glassBlur:bounded(v.glassBlur,0,30,2,DEFAULT_PREFERENCES.glassBlur),
     glassOpacity:bounded(v.glassOpacity,55,95,5,DEFAULT_PREFERENCES.glassOpacity),
-    glassCards:typeof v.glassCards==='boolean'?v.glassCards:DEFAULT_PREFERENCES.glassCards
+    glassCards:typeof v.glassCards==='boolean'?v.glassCards:DEFAULT_PREFERENCES.glassCards,
+    safePaste:typeof v.safePaste==='boolean'?v.safePaste:DEFAULT_PREFERENCES.safePaste
   };
 }
 function compactRenderRequired(code){
@@ -123,7 +140,8 @@ const COMMON = 'abstract as assert async await break case catch class const cont
 const JAVA = 'BigDecimal Boolean Byte Character Double Enum Float Integer Long Math Object Short String System UUID Instant LocalDate LocalDateTime List Map Set Optional ArrayList HashMap'.split(' ');
 const PY = 'and as assert async await class def del elif else except False finally for from global if import in is lambda None nonlocal not or pass raise return self True try while with yield'.split(' ');
 const SQL = 'SELECT FROM WHERE JOIN INNER LEFT RIGHT OUTER ON ORDER BY GROUP HAVING INSERT INTO VALUES UPDATE SET DELETE CREATE TABLE ALTER DROP NULL PRIMARY KEY NOT AND OR AS DISTINCT LIMIT COUNT SUM AVG'.split(' ');
-const langs = {java:[...COMMON,...JAVA],python:PY,sql:SQL,javascript:COMMON,typescript:[...COMMON,'string','number','boolean','unknown','never'],csharp:[...COMMON,'namespace','using','string','int','bool','decimal'],cpp:[...COMMON,'include','cout','cin','std','int','bool'],kotlin:[...COMMON,'fun','val','var','data'],rust:[...COMMON,'fn','mut','impl','pub','struct','trait','use'],go:[...COMMON,'func','package','defer','chan','go'],php:[...COMMON,'echo','namespace','use'],bash:['if','then','fi','for','do','done','in','case','esac'],json:[],html:[],css:[],text:[]};
+const MONGO = 'aggregate find findOne insertOne insertMany updateOne updateMany deleteOne deleteMany countDocuments distinct bulkWrite createIndex watch $match $project $group $sort $limit $unwind $lookup $and $or $gt $gte $lt $lte $in $set $sum $avg'.split(' ');
+const langs = {mongodb:[...COMMON,...MONGO],java:[...COMMON,...JAVA],python:PY,sql:SQL,javascript:COMMON,typescript:[...COMMON,'string','number','boolean','unknown','never'],csharp:[...COMMON,'namespace','using','string','int','bool','decimal'],cpp:[...COMMON,'include','cout','cin','std','int','bool'],kotlin:[...COMMON,'fun','val','var','data'],rust:[...COMMON,'fn','mut','impl','pub','struct','trait','use'],go:[...COMMON,'func','package','defer','chan','go'],php:[...COMMON,'echo','namespace','use'],bash:['if','then','fi','for','do','done','in','case','esac'],json:[],html:[],css:[],text:[]};
 const typeWords = new Set(JAVA.concat(['string','number','boolean','unknown','int','bool','decimal','float','double','void','var','val','fn','func']));
 const ASM_MNEMONICS = new Set('mov movzx movsx lea xor add sub inc dec cmp test and or not neg push pop call ret jmp je jne jz jnz ja jb jge jle loop syscall sysenter int nop shl shr sar sal rol ror mul imul div idiv cdq cqo cld std rep repe repne stosb lodsb cmpsb'.split(' '));
 const ASM_DIRECTIVES = new Set('section segment global extern bits default db dw dd dq dt equ resb resw resd resq times align org cpu use16 use32 use64'.split(' '));
@@ -216,7 +234,20 @@ const MAX_CHAT_TEXT = 65536; // Maximum CodeBridge native message length; not a 
 function supportedCodeStructure(s, language) {
   const shared = /[{};=<>()[\]]/;
   switch (language) {
-    case 'python': return /^\s*(def |class |from |import |async def |for |if )/m.test(s) && /[:=(]/.test(s);
+    case 'mongodb': return /^\s*db\.(?:[A-Za-z_$][\w$]*|getCollection\s*\()/m.test(s) && /\b(?:aggregate|find|findOne|insertOne|insertMany|updateOne|updateMany|deleteOne|deleteMany|countDocuments|distinct|bulkWrite|createIndex|watch)\s*\(/.test(s) ||
+      (/(?:\$match|\$project|\$group|\$sort|\$and|\$or)\b/.test(s) && /[{}\[\]]/.test(s));
+    case 'java': {
+      const lines=s.split('\n').map(line=>line.trim()).filter(Boolean);
+      if (lines.length && lines.every(line=>/^(?:import\s+(?:static\s+)?[A-Za-z_$][\w$]*(?:\.[A-Za-z_$*][\w$*]*)+|package\s+[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*;$/.test(line))) return true;
+      return shared.test(s) && (/[;{}()]/.test(s) || /=>/.test(s));
+    }
+    case 'python': {
+      const lines=s.split('\n').map(line=>line.trim()).filter(Boolean);
+      const importLine=/^(?:from\s+[A-Za-z_][\w.]*\s+import\s+[A-Za-z_*][\w*, ]*|import\s+[A-Za-z_][\w.]*(?:\s+as\s+\w+)?(?:\s*,\s*[A-Za-z_][\w.]*)*)$/;
+      if (lines.length && lines.every(line=>importLine.test(line))) return true;
+      return /^\s*(?:def |class |from |import |async def |for |if )/m.test(s) && /[:=(]/.test(s) ||
+        /\b(?:Flask\s*\(\s*__name__|MongoClient\s*\(|redis\.Redis\s*\()/.test(s);
+    }
     case 'sql': return /\b(SELECT|INSERT|CREATE|UPDATE|DELETE|ALTER)\b/i.test(s) && /\b(FROM|INTO|TABLE|SET|WHERE|VALUES)\b/i.test(s);
     case 'html': return /<\/?[a-z][\s\S]*?>/i.test(s);
     case 'css': return /\{[^{}]*:[^{}]*[;}]/.test(s);
@@ -256,7 +287,7 @@ function recognizeChatCode(message) {
   // the fence in the visual DOM; in that case detection continues as plain text.
   const fence = input.match(/^```(?:([a-zA-Z+#.0-9]+)\n)?([\s\S]*?)```$/);
   if (fence && fence[2].trim()) {
-    const code = fence[2].replace(/^\n|\n$/g,'');
+    const code = fence[2];
     const guess = detectLanguage(code);
     return {code,language:guess.language,filename:'',source:'fenced'};
   }
@@ -273,7 +304,13 @@ function recognizeChatCode(message) {
     /\b(?:SELECT|INSERT|UPDATE|CREATE)\b/i.test(input) && /\b(?:FROM|INTO|SET|TABLE)\b/i.test(input) ||
     /^\s*<\w+\b/.test(input) && /<\/\w+>/.test(input)
   );
-  if (!strongSingleLine && (lineCount < 2 || (guess.language !== 'asm' && structuralLines < 1))) return null;
+  const isolatedImport = (guess.language === 'java' && /^\s*(?:import\s+(?:static\s+)?[\w$]+(?:\.[\w$*]+)+|package\s+[\w$]+(?:\.[\w$]+)*)\s*;\s*$/.test(input)) ||
+    (guess.language === 'python' && /^\s*(?:from\s+[\w.]+\s+import\s+[\w*, ]+|import\s+[\w.]+(?:\s+as\s+\w+)?)\s*$/.test(input));
+  const singleMongo = guess.language === 'mongodb' && ( 
+    /^db\.[\w$]+\.(?:aggregate|find|findOne|insertOne|insertMany|updateOne|updateMany|deleteOne|deleteMany|countDocuments|distinct|bulkWrite|createIndex|watch)\s*\([\s\S]+\)$/.test(input) ||
+    /^\[\s*\{\s*\$(?:match|project|group|sort)\s*:/.test(input) && (input.match(/\$(?:match|project|group|sort|and|or|gt|gte|lt|lte)\b/g)||[]).length >= 2
+  );
+  if (!strongSingleLine && !singleMongo && !isolatedImport && (lineCount < 2 || (guess.language !== 'asm' && guess.language !== 'python' && structuralLines < 1))) return null;
   return {code:original,language:guess.language,filename:'',source:'native'};
 }
 
@@ -293,7 +330,7 @@ function likelyCodePrefix(value) {
   const s = value.replace(/^\s*(?:\[codebridge:[^\]]+\]\s*)?/, '').slice(0, 1400);
   if (/^\s*\[codebridge:v1;/i.test(value)) return true;
   if (/^\s*```(?:\w+)?/m.test(s)) return true;
-  return /(?:^|\n)\s*(?:public\s+(?:(?:static|final|abstract)\s+)*(?:record|class|interface|enum|\w+\s+\w+\s*\()|private\s+(?:static\s+)?\w+|protected\s+\w+|package\s+[\w.]+\s*;|import\s+(?:java|javax)\.|@Override\b|def\s+\w+\s*\(|async\s+def\s+\w+|class\s+\w+\s*[:{(]|(?:const|let|var)\s+\w+\s*=|(?:export\s+)?(?:async\s+)?function\s+\w+\s*\(|(?:export\s+)?(?:interface|type)\s+\w+|(?:SELECT|INSERT\s+INTO|CREATE\s+TABLE|UPDATE\s+\w+\s+SET)\b|(?:<html\b|<!doctype\s+html)|(?:section\s+\.(?:data|text|bss|rodata)\b|global\s+_start\b|_start\s*:|mov\s+(?:r(?:ax|di|si|dx|bx)|e(?:ax|bx|cx|dx))\s*,)|\{\s*"[^"]+"\s*:)/im.test(s);
+  return /(?:^|\n)\s*(?:public\s+(?:(?:static|final|abstract)\s+)*(?:record|class|interface|enum|\w+\s+\w+\s*\()|private\s+(?:static\s+)?\w+|protected\s+\w+|package\s+[\w.]+\s*;|import\s+(?:(?:static\s+)?[\w$]+\.)+[\w$*]+\s*;|from\s+[\w.]+\s+import\s+\w+|import\s+(?:flask|pymongo|redis)\b|(?:app\s*=\s*Flask\s*\(|\w+\s*=\s*MongoClient\s*\(|\w+\s*=\s*redis\.Redis\s*\()|db\.[\w$]+\.(?:aggregate|find|findOne|updateOne|updateMany|insertOne|insertMany)\s*\(|\{\s*\$(?:match|project|group|sort)\s*:|@Override\b|def\s+\w+\s*\(|async\s+def\s+\w+|class\s+\w+\s*[:{(]|(?:const|let|var)\s+\w+\s*=|(?:export\s+)?(?:async\s+)?function\s+\w+\s*\(|(?:export\s+)?(?:interface|type)\s+\w+|(?:SELECT|INSERT\s+INTO|CREATE\s+TABLE|UPDATE\s+\w+\s+SET)\b|(?:<html\b|<!doctype\s+html)|(?:section\s+\.(?:data|text|bss|rodata)\b|global\s+_start\b|_start\s*:|mov\s+(?:r(?:ax|di|si|dx|bx)|e(?:ax|bx|cx|dx))\s*,)|\{\s*"[^"]+"\s*:)/im.test(s);
 }
 
 /** Returns the actual native control. Works when the label is inside its own SPAN. */
@@ -334,7 +371,7 @@ function codeSafetyWarning(code){
  */
 const DIAGNOSTIC_EVENTS = Object.freeze([
   'inspected', 'rendered', 'restored', 'detached', 'expansion',
-  'oversized', 'copySuccess', 'copyFailure', 'renderFailure'
+  'oversized', 'copySuccess', 'copyFailure', 'renderFailure', 'safePaste', 'safePasteFailure'
 ]);
 const EVENT_SET = new Set(DIAGNOSTIC_EVENTS);
 const MAX_SAMPLES = 128;
@@ -386,16 +423,105 @@ function createDiagnosticStore(clock = () => performance.now()) {
   return {add, sample, snapshot, reset};
 }
 
-/* CodeBridge v0.9 — incremental WhatsApp Web enhancement, without sending or intercepting messages.
+/** On-demand per-message language override. No message content is persisted. */
+
+
+const MANUAL_LANGUAGES = Object.freeze([
+  ['java','Java'], ['python','Python'], ['javascript','JavaScript'],
+  ['typescript','TypeScript'], ['mongodb','MongoDB'], ['json','JSON'],
+  ['sql','SQL'], ['asm','Assembly / NASM'], ['bash','Bash'],
+  ['html','HTML'], ['css','CSS'], ['cpp','C++'], ['csharp','C#'],
+  ['go','Go'], ['rust','Rust'], ['kotlin','Kotlin'], ['php','PHP'],
+  ['text','Texto monoespaciado']
+].filter(([value])=>LANGUAGES.includes(value)));
+const isManualLanguage = value => LANGUAGES.includes(value);
+
+/** Explicit user choice wins over heuristics. Never bypass limits. */
+function resolveCardContent(raw, forcedLanguage = null) {
+  if(typeof raw!=='string') return null;
+  const code=normalizeNewlines(raw);
+  if(!code.trim() || code.length>MAX_CHAT_TEXT) return null;
+  const detected=recognizeChatCode(code);
+  if(!isManualLanguage(forcedLanguage)) return detected;
+  return {...(detected||{code, filename:'', source:'manual'}), language:forcedLanguage, source:'manual'};
+}
+
+/* Protección local de fragmentos al pegar: no se almacena código y no se envía nada. */
+
+
+/** Los símbolos de formato de WhatsApp pueden transformar código fuente. */
+function hasMarkdownSensitiveCode(source) {
+  const text=String(source??'');
+  return /__\w+__/.test(text) || /(^|[^\w])_[^\s_][^\n]*?_(?=$|[^\w])/m.test(text) ||
+    /(^|[^\w])\*[^\s*][^\n]*?\*(?=$|[^\w])/m.test(text) ||
+    /(^|[^\w])~[^\s~][^\n]*?~(?=$|[^\w])/m.test(text) ||
+    /^\s*(?:\* |\- |\d+\. |> )/m.test(text);
+}
+
+/** Solo protege código reconocido, nunca conversaciones normales ni bloques ya delimitados. */
+function prepareSafePaste(input) {
+  if(typeof input!=='string'||input.length>MAX_CHAT_TEXT||input.length<12)return null;
+  const code=normalizeNewlines(input);
+  if(!code.trim()||code.includes('```')||!hasMarkdownSensitiveCode(code))return null;
+  const recognized=recognizeChatCode(code);
+  if(!recognized||recognized.source!=='native')return null;
+  return '```'+code+'```';
+}
+
+function normalizeDraftValue(value){
+  return normalizeNewlines(String(value??''))
+    .replace(/[​-‍﻿]/g,'')
+    .replace(/ /g,' ');
+}
+
+function extractFencePayload(value){
+  const draft=normalizeDraftValue(value).trim();
+  const match=draft.match(/^```([\s\S]*?)```$/);
+  return match?match[1]:null;
+}
+
+/**
+ * WhatsApp puede normalizar visualmente el editor antes de que podamos leerlo.
+ * Consideramos válido el pegado si el borrador conserva el bloque completo o,
+ * en entornos que ocultan los fences, si mantiene íntegro el código original
+ * y todos los identificadores sensibles que motivaron la protección.
+ */
+function verifySafePasteDraft(draftValue, original, protectedText){
+  const draft=normalizeDraftValue(draftValue);
+  const raw=normalizeDraftValue(original);
+  const fenced=normalizeDraftValue(protectedText);
+  if(!draft.trim()) return false;
+  if(draft.includes(fenced)) return true;
+  const payload=extractFencePayload(draft);
+  if(payload!==null && payload===raw) return true;
+  if(draft.includes(raw)){
+    const sensitive=[...new Set(raw.match(/__\w+__/g)||[])];
+    return sensitive.every(token=>draft.includes(token));
+  }
+  return false;
+}
+
+/* CodeBridge v0.9.6.4 — Smart Clipboard is the sole protection workflow.
    Incremental DOM queue prevents rescanning every chat bubble on every message mutation. */
+// The old content script may still be running after an extension update.
+// A synchronous disable event asks it to release its observers and overlays.
+// This cannot stop other separately installed extension IDs: remove those in chrome://extensions.
+if (window.__CODEBRIDGE_ON__ && window.__CODEBRIDGE_CONTENT_VERSION !== '0.9.6.4') {
+  document.dispatchEvent(new CustomEvent('codebridge:disable'));
+}
 if (window.__CODEBRIDGE_ON__) {
   document.dispatchEvent(new CustomEvent('codebridge:rescan'));
 } else {
   window.__CODEBRIDGE_ON__ = true;
+  window.__CODEBRIDGE_CONTENT_VERSION = '0.9.6.4';
   const BUBBLES = '.message-in, .message-out, [data-testid="msg-container"]';
   const observerRoot = document.querySelector('#app') || document.body;
   const states = new Map();
   const expansion = new WeakMap();
+  // Only the chosen language is held per DOM node, never an additional copy
+  // of a conversation or snippet. Entries disappear when the DOM is collected.
+  const manualOverrides = new WeakMap();
+  let manualBubble=null, manualPicker=null, manualPreviousPosition='';
   const pendingBubbles = new Set();
   const diagnostics=createDiagnosticStore();
   let active=true, timer=null;
@@ -404,6 +530,19 @@ if (window.__CODEBRIDGE_ON__) {
   let lastGlassSetting=null;
   let preferences=normalizePreferences();
   const mediaQuery=window.matchMedia?.('(prefers-color-scheme: dark)');
+  // Smart Clipboard is the only preparation workflow in this experimental build.
+  // The legacy paste-warning overlay has been removed, not merely suppressed.
+  // Ctrl+V belongs entirely to WhatsApp. An unprepared paste is NOT protected.
+  const CLIPBOARD_NOTICE_KEY='codebridge.smartClipboardPreparedNotice';
+  function clearLegacyPasteNotice(){
+    // Clean up overlays left behind by older versions in the current document.
+    for(const element of document.querySelectorAll('[data-codebridge-safe-paste-tip],[data-codebridge-paste-warning]')){
+      element.remove();
+    }
+  }
+  clearLegacyPasteNotice();
+  function onClipboardPrepared(){ clearLegacyPasteNotice(); }
+
   const cardCss = `
     :host{display:block;min-width:0;max-width:100%;margin:5px 0;--accent:#f58136;--accent-hover:#ff954f;font:13px/1.5 Urbanist,'Segoe UI',system-ui,sans-serif;color:var(--cb-text)}
     :host([data-ui="dark"]){--cb-text:#f1efed;--cb-muted:#c4bfba;--cb-panel:rgba(41,39,37,var(--cb-opacity,.75));--cb-solid:#292725;--cb-raised:rgba(53,49,46,.80);--cb-border:rgba(255,246,238,.18);--cb-input:rgba(49,46,43,.82);--cb-accent-text:#ffae78;--cb-shadow:0 12px 25px -18px #000b}
@@ -416,6 +555,8 @@ if (window.__CODEBRIDGE_ON__) {
     .header{display:flex;align-items:center;gap:9px;min-height:43px;padding:7px 11px;background:linear-gradient(112deg,rgba(245,129,54,.12),transparent 58%),var(--cb-raised);color:var(--cb-text);border-bottom:1px solid var(--cb-border)}
     .file-icon{display:grid;place-items:center;width:25px;height:25px;flex:none;border-radius:8px;background:var(--accent);color:#202020;font:800 11px Consolas,monospace}
     .file{font-size:12px;font-weight:700;letter-spacing:-.1px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .language-select{appearance:auto;max-width:125px;min-width:78px;border:1px solid var(--cb-border);border-radius:8px;padding:4px 5px;font:600 10px Urbanist,'Segoe UI',sans-serif;color:var(--cb-text);background:var(--cb-input);cursor:pointer}
+    .language-select:focus-visible{outline:2px solid var(--cb-accent-text);outline-offset:2px}
     .lang{font-size:10px;font-weight:750;letter-spacing:.4px;color:var(--cb-accent-text);background:var(--cb-input);border:1px solid var(--cb-border);border-radius:8px;padding:4px 7px;white-space:nowrap}
     .codeview{max-height:var(--cb-max-height,420px);overflow:auto;overscroll-behavior:contain;user-select:text;-webkit-user-select:text;background:#1e1e1e}
     .cb-code{margin:0;padding:14px;line-height:1.65;font-family:Consolas,'Cascadia Code','JetBrains Mono',monospace;tab-size:4;user-select:text;-webkit-user-select:text}
@@ -507,7 +648,7 @@ if (window.__CODEBRIDGE_ON__) {
     if(more){
       const current=states.get(original);if(current)restore(original,current);
       const prefix=readText(original);
-      if(!likelyCodePrefix(prefix)&&!recognizeChatCode(prefix))return true;
+      if(!manualOverrides.has(original)&&!likelyCodePrefix(prefix)&&!recognizeChatCode(prefix))return true;
       let pending=expansion.get(bubble);
       if(!pending||!prefix.startsWith(pending.prefix)){
         pending={prefix:prefix.slice(0,80),beforeLength:prefix.length,lastLength:prefix.length,tries:0,clickedAt:0};expansion.set(bubble,pending);
@@ -543,7 +684,7 @@ if (window.__CODEBRIDGE_ON__) {
     if(current)restore(original,current);
     const raw=readText(original);
     if(raw.length>MAX_CHAT_TEXT){diagnostics.add('oversized');return;}
-    const data=recognizeChatCode(raw);if(!data)return;
+    const data=resolveCardContent(raw,manualOverrides.get(original));if(!data)return;
     const renderStarted=performance.now();
     const host=document.createElement('div');host.className='codebridge-host';host.dataset.codebridge='render';
     host.dataset.ui=currentUi();
@@ -560,7 +701,33 @@ if (window.__CODEBRIDGE_ON__) {
     const fileIcon=document.createElement('span');fileIcon.className='file-icon';fileIcon.textContent='{ }';
     const label=document.createElement('span');label.className='file';label.textContent=data.filename||'Fragmento de código';
     const language=document.createElement('span');language.className='lang';language.textContent=data.language.toUpperCase();
-    head.append(fileIcon,label,language);
+    const picker=document.createElement('select');picker.className='language-select';
+    picker.setAttribute('aria-label','Cambiar lenguaje de este fragmento');
+    const autoOption=document.createElement('option');autoOption.value='auto';autoOption.textContent='Detección automática';picker.appendChild(autoOption);
+    for(const [id,name] of MANUAL_LANGUAGES){
+      const option=document.createElement('option');option.value=id;option.textContent=name;
+      picker.appendChild(option);
+    }
+    picker.value=manualOverrides.has(original)?data.language:'auto';
+    picker.addEventListener('click',event=>event.stopPropagation());
+    picker.addEventListener('change',event=>{
+      event.stopPropagation();
+      const chosen=picker.value;
+      if(chosen==='auto'){
+        manualOverrides.delete(original);
+        const current=states.get(original);
+        if(current)restore(original,current);
+        queueBubble(bubble);
+        return;
+      }
+      if(!isManualLanguage(chosen))return;
+      manualOverrides.set(original,chosen);
+      language.textContent=chosen.toUpperCase();
+      renderHighlighted(view,{...effectiveCardSettings(preferences),...data,language:chosen,
+        theme:THEMES.includes(data.theme)?data.theme:preferences.theme});
+      status.textContent=isLowMode(preferences)?'Low Mode · Texto íntegro':'Lenguaje elegido manualmente · Copiable';
+    });
+    head.append(fileIcon,label,language,picker);
     const view=document.createElement('div');view.className='codeview';view.style.setProperty('--cb-max-height',preferences.maxHeight+'px');
     renderHighlighted(view,{...effectiveCardSettings(preferences),...data,theme:THEMES.includes(data.theme)?data.theme:preferences.theme});
     const tools=document.createElement('div');tools.className='tools';
@@ -620,11 +787,57 @@ if (window.__CODEBRIDGE_ON__) {
     }
     updateGlassModes();
   }
+  // One transient, delegated control for unsupported fragments, not a button
+  // added to every message in a chat. User-initiated conversion is always local.
+  function clearManualPicker(){
+    if(manualPicker)manualPicker.remove();
+    if(manualBubble && manualBubble.isConnected)manualBubble.style.position=manualPreviousPosition;
+    manualPicker=null;manualBubble=null;manualPreviousPosition='';
+  }
+  function exposeManualPicker(bubble){
+    if(!active||!bubble||!bubble.isConnected)return;
+    if(manualBubble===bubble)return;
+    const original=originalNode(bubble);
+    if(!original || states.has(original) || original.textContent.trim().length<8 || original.textContent.length>MAX_CHAT_TEXT) {
+      clearManualPicker();return;
+    }
+    clearManualPicker();
+    const picker=document.createElement('select');picker.className='codebridge-manual-picker';
+    picker.setAttribute('aria-label','CodeBridge: convertir este mensaje en código');
+    picker.style.cssText='position:absolute;right:4px;top:3px;z-index:10;max-width:175px;background:#292725;color:#fff;border:1px solid #f58136;border-radius:9px;padding:5px;font:600 11px system-ui;box-shadow:0 2px 10px #0006;cursor:pointer';
+    const hint=document.createElement('option');hint.value='';hint.textContent='</> Ver como código…';picker.appendChild(hint);
+    for(const [id,name] of MANUAL_LANGUAGES){const option=document.createElement('option');option.value=id;option.textContent=name;picker.appendChild(option);}
+    picker.addEventListener('pointerdown',event=>event.stopPropagation());
+    picker.addEventListener('click',event=>event.stopPropagation());
+    picker.addEventListener('change',event=>{
+      event.stopPropagation();const chosen=picker.value;
+      if(!isManualLanguage(chosen))return;
+      manualOverrides.set(original,chosen);clearManualPicker();queueBubble(bubble);
+    });
+    manualBubble=bubble;manualPicker=picker;manualPreviousPosition=bubble.style.position;
+    if(getComputedStyle(bubble).position==='static')bubble.style.position='relative';
+    bubble.appendChild(picker);
+  }
+  function onBubblePointer(event){
+    if(event.target?.closest?.('.codebridge-host, .codebridge-manual-picker'))return;
+    const bubble=bubbleOf(event.target);
+    if(bubble)exposeManualPicker(bubble);
+  }
+  function onBubbleLeave(event){
+    if(!manualBubble)return;
+    const from=bubbleOf(event.target);
+    if(from!==manualBubble)return;
+    const to=event.relatedTarget;
+    if(to instanceof Node && manualBubble.contains(to))return;
+    clearManualPicker();
+  }
+  observerRoot.addEventListener('pointerover',onBubblePointer);
+  observerRoot.addEventListener('pointerout',onBubbleLeave);
   // Incremental observation: schedule only bubbles touched by DOM changes.
   // The initial scan and explicit reload still inspect all currently mounted messages.
   function bubbleOf(node){
     const element=node.nodeType===Node.ELEMENT_NODE?node:node.parentElement;
-    if(!element||element.closest('.codebridge-host'))return null;
+    if(!element||element.closest('.codebridge-host, .codebridge-manual-picker'))return null;
     return element.closest(BUBBLES);
   }
   function queueBubble(bubble){
@@ -694,8 +907,13 @@ if (window.__CODEBRIDGE_ON__) {
     profile:preferences.performanceProfile,active
   });
   const onDiagnosticMessage=(request,sender,sendResponse)=>{
-    if(!request||!['codebridge:diagnostics:get','codebridge:diagnostics:reset'].includes(request.type))return false;
+    if(!request||!['codebridge:diagnostics:get','codebridge:diagnostics:reset','codebridge:clipboard:prepared'].includes(request.type))return false;
     if(sender?.id&&sender.id!==chrome.runtime?.id)return false;
+    if(request.type==='codebridge:clipboard:prepared'){
+      onClipboardPrepared();
+      sendResponse({ok:true});
+      return false;
+    }
     if(request.type==='codebridge:diagnostics:reset')diagnostics.reset();
     sendResponse({ok:true,diagnostics:diagnosticSnapshot()});
     return false;
@@ -704,8 +922,11 @@ if (window.__CODEBRIDGE_ON__) {
   const observer=new MutationObserver(onMutations);
   observer.observe(observerRoot,{childList:true,characterData:true,subtree:true});
   const onStorage=(changes,area)=>{
-    if(area!=='local'||!Object.keys(DEFAULT_PREFERENCES).some(k=>changes[k]))return;
-    void loadPrefs();
+    if(area!=='local')return;
+    if(changes[CLIPBOARD_NOTICE_KEY]?.newValue){
+      onClipboardPrepared();
+    }
+    if(Object.keys(DEFAULT_PREFERENCES).some(k=>changes[k]))void loadPrefs();
   };
   const onSystemTheme=()=>{
     if(preferences.uiMode!=='auto')return;
@@ -717,12 +938,16 @@ if (window.__CODEBRIDGE_ON__) {
   function disable(){
     if(!active)return;active=false;observer.disconnect();clearTimeout(timer);
     for(const id of retryTimers)clearTimeout(id);retryTimers.clear();
-    pendingBubbles.clear();document.removeEventListener('codebridge:rescan',onRescan);
+    pendingBubbles.clear();clearManualPicker();
+    clearLegacyPasteNotice();
+    observerRoot.removeEventListener('pointerover',onBubblePointer);
+    observerRoot.removeEventListener('pointerout',onBubbleLeave);
+    document.removeEventListener('codebridge:rescan',onRescan);
     document.removeEventListener('codebridge:disable',disable);
     chrome.storage?.onChanged?.removeListener(onStorage);
     chrome.runtime?.onMessage?.removeListener(onDiagnosticMessage);
     mediaQuery?.removeEventListener?.('change',onSystemTheme);
-    resetCards();window.__CODEBRIDGE_ON__=false;
+    resetCards();window.__CODEBRIDGE_ON__=false;delete window.__CODEBRIDGE_CONTENT_VERSION;
   }
   document.addEventListener('codebridge:rescan',onRescan);
   document.addEventListener('codebridge:disable',disable);

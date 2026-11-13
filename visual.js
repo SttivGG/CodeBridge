@@ -1,6 +1,6 @@
 // Pure appearance validation. Shared by the panel and isolated chat content script.
 export const DEFAULT_PREFERENCES=Object.freeze({
-  uiMode:'auto',performanceProfile:'balanced',theme:'dark-plus',lineNumbers:true,wrap:false,fontSize:13,maxHeight:420,glassBlur:18,glassOpacity:75,glassCards:true
+  uiMode:'auto',performanceProfile:'balanced',theme:'dark-plus',lineNumbers:true,wrap:false,fontSize:13,maxHeight:420,glassBlur:18,glassOpacity:75,glassCards:true,safePaste:true
 });
 const VISUAL_THEMES=new Set(['dark-plus','light-plus','github-dark','github-light','one-dark-pro','dracula']);
 export function resolveUiMode(mode,systemDark=false){return mode==='light'||mode==='dark'?mode:systemDark?'dark':'light';}
@@ -17,7 +17,8 @@ export function normalizePreferences(raw={}){
     maxHeight:bounded(v.maxHeight,260,700,20,DEFAULT_PREFERENCES.maxHeight),
     glassBlur:bounded(v.glassBlur,0,30,2,DEFAULT_PREFERENCES.glassBlur),
     glassOpacity:bounded(v.glassOpacity,55,95,5,DEFAULT_PREFERENCES.glassOpacity),
-    glassCards:typeof v.glassCards==='boolean'?v.glassCards:DEFAULT_PREFERENCES.glassCards
+    glassCards:typeof v.glassCards==='boolean'?v.glassCards:DEFAULT_PREFERENCES.glassCards,
+    safePaste:typeof v.safePaste==='boolean'?v.safePaste:DEFAULT_PREFERENCES.safePaste
   };
 }
 export function compactRenderRequired(code){

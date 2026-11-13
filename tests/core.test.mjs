@@ -46,7 +46,7 @@ test('Monoespaciado WhatsApp no crea delimitador ambiguo',()=>{
 });
 test('Todos los temas presentan paletas',()=>{
  THEMES.forEach(theme=>assert.ok(THEME_COLORS[theme]));
- assert.equal(LANGUAGES.length,17);
+ assert.equal(LANGUAGES.length,18);
 });
 test('Tokenizador conserva absolutamente todos los caracteres',()=>{
  const code='public record Factura(String nombre) {\n // comentario\n String v = "Hola \\"Mundo\\"";\n /* comentario \n multilinea */\n}\n';
