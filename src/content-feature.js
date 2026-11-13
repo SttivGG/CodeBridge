@@ -1,13 +1,24 @@
-/* CodeBridge v0.9 — incremental WhatsApp Web enhancement, without sending or intercepting messages.
+/* CodeBridge v0.9.6.4 — Smart Clipboard is the sole protection workflow.
    Incremental DOM queue prevents rescanning every chat bubble on every message mutation. */
+// The old content script may still be running after an extension update.
+// A synchronous disable event asks it to release its observers and overlays.
+// This cannot stop other separately installed extension IDs: remove those in chrome://extensions.
+if (window.__CODEBRIDGE_ON__ && window.__CODEBRIDGE_CONTENT_VERSION !== '0.9.6.4') {
+  document.dispatchEvent(new CustomEvent('codebridge:disable'));
+}
 if (window.__CODEBRIDGE_ON__) {
   document.dispatchEvent(new CustomEvent('codebridge:rescan'));
 } else {
   window.__CODEBRIDGE_ON__ = true;
+  window.__CODEBRIDGE_CONTENT_VERSION = '0.9.6.4';
   const BUBBLES = '.message-in, .message-out, [data-testid="msg-container"]';
   const observerRoot = document.querySelector('#app') || document.body;
   const states = new Map();
   const expansion = new WeakMap();
+  // Only the chosen language is held per DOM node, never an additional copy
+  // of a conversation or snippet. Entries disappear when the DOM is collected.
+  const manualOverrides = new WeakMap();
+  let manualBubble=null, manualPicker=null, manualPreviousPosition='';
   const pendingBubbles = new Set();
   const diagnostics=createDiagnosticStore();
   let active=true, timer=null;
@@ -16,6 +27,19 @@ if (window.__CODEBRIDGE_ON__) {
   let lastGlassSetting=null;
   let preferences=normalizePreferences();
   const mediaQuery=window.matchMedia?.('(prefers-color-scheme: dark)');
+  // Smart Clipboard is the only preparation workflow in this experimental build.
+  // The legacy paste-warning overlay has been removed, not merely suppressed.
+  // Ctrl+V belongs entirely to WhatsApp. An unprepared paste is NOT protected.
+  const CLIPBOARD_NOTICE_KEY='codebridge.smartClipboardPreparedNotice';
+  function clearLegacyPasteNotice(){
+    // Clean up overlays left behind by older versions in the current document.
+    for(const element of document.querySelectorAll('[data-codebridge-safe-paste-tip],[data-codebridge-paste-warning]')){
+      element.remove();
+    }
+  }
+  clearLegacyPasteNotice();
+  function onClipboardPrepared(){ clearLegacyPasteNotice(); }
+
   const cardCss = `
     :host{display:block;min-width:0;max-width:100%;margin:5px 0;--accent:#f58136;--accent-hover:#ff954f;font:13px/1.5 Urbanist,'Segoe UI',system-ui,sans-serif;color:var(--cb-text)}
     :host([data-ui="dark"]){--cb-text:#f1efed;--cb-muted:#c4bfba;--cb-panel:rgba(41,39,37,var(--cb-opacity,.75));--cb-solid:#292725;--cb-raised:rgba(53,49,46,.80);--cb-border:rgba(255,246,238,.18);--cb-input:rgba(49,46,43,.82);--cb-accent-text:#ffae78;--cb-shadow:0 12px 25px -18px #000b}
@@ -28,6 +52,8 @@ if (window.__CODEBRIDGE_ON__) {
     .header{display:flex;align-items:center;gap:9px;min-height:43px;padding:7px 11px;background:linear-gradient(112deg,rgba(245,129,54,.12),transparent 58%),var(--cb-raised);color:var(--cb-text);border-bottom:1px solid var(--cb-border)}
     .file-icon{display:grid;place-items:center;width:25px;height:25px;flex:none;border-radius:8px;background:var(--accent);color:#202020;font:800 11px Consolas,monospace}
     .file{font-size:12px;font-weight:700;letter-spacing:-.1px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .language-select{appearance:auto;max-width:125px;min-width:78px;border:1px solid var(--cb-border);border-radius:8px;padding:4px 5px;font:600 10px Urbanist,'Segoe UI',sans-serif;color:var(--cb-text);background:var(--cb-input);cursor:pointer}
+    .language-select:focus-visible{outline:2px solid var(--cb-accent-text);outline-offset:2px}
     .lang{font-size:10px;font-weight:750;letter-spacing:.4px;color:var(--cb-accent-text);background:var(--cb-input);border:1px solid var(--cb-border);border-radius:8px;padding:4px 7px;white-space:nowrap}
     .codeview{max-height:var(--cb-max-height,420px);overflow:auto;overscroll-behavior:contain;user-select:text;-webkit-user-select:text;background:#1e1e1e}
     .cb-code{margin:0;padding:14px;line-height:1.65;font-family:Consolas,'Cascadia Code','JetBrains Mono',monospace;tab-size:4;user-select:text;-webkit-user-select:text}
@@ -119,7 +145,7 @@ if (window.__CODEBRIDGE_ON__) {
     if(more){
       const current=states.get(original);if(current)restore(original,current);
       const prefix=readText(original);
-      if(!likelyCodePrefix(prefix)&&!recognizeChatCode(prefix))return true;
+      if(!manualOverrides.has(original)&&!likelyCodePrefix(prefix)&&!recognizeChatCode(prefix))return true;
       let pending=expansion.get(bubble);
       if(!pending||!prefix.startsWith(pending.prefix)){
         pending={prefix:prefix.slice(0,80),beforeLength:prefix.length,lastLength:prefix.length,tries:0,clickedAt:0};expansion.set(bubble,pending);
@@ -155,7 +181,7 @@ if (window.__CODEBRIDGE_ON__) {
     if(current)restore(original,current);
     const raw=readText(original);
     if(raw.length>MAX_CHAT_TEXT){diagnostics.add('oversized');return;}
-    const data=recognizeChatCode(raw);if(!data)return;
+    const data=resolveCardContent(raw,manualOverrides.get(original));if(!data)return;
     const renderStarted=performance.now();
     const host=document.createElement('div');host.className='codebridge-host';host.dataset.codebridge='render';
     host.dataset.ui=currentUi();
@@ -172,7 +198,33 @@ if (window.__CODEBRIDGE_ON__) {
     const fileIcon=document.createElement('span');fileIcon.className='file-icon';fileIcon.textContent='{ }';
     const label=document.createElement('span');label.className='file';label.textContent=data.filename||'Fragmento de código';
     const language=document.createElement('span');language.className='lang';language.textContent=data.language.toUpperCase();
-    head.append(fileIcon,label,language);
+    const picker=document.createElement('select');picker.className='language-select';
+    picker.setAttribute('aria-label','Cambiar lenguaje de este fragmento');
+    const autoOption=document.createElement('option');autoOption.value='auto';autoOption.textContent='Detección automática';picker.appendChild(autoOption);
+    for(const [id,name] of MANUAL_LANGUAGES){
+      const option=document.createElement('option');option.value=id;option.textContent=name;
+      picker.appendChild(option);
+    }
+    picker.value=manualOverrides.has(original)?data.language:'auto';
+    picker.addEventListener('click',event=>event.stopPropagation());
+    picker.addEventListener('change',event=>{
+      event.stopPropagation();
+      const chosen=picker.value;
+      if(chosen==='auto'){
+        manualOverrides.delete(original);
+        const current=states.get(original);
+        if(current)restore(original,current);
+        queueBubble(bubble);
+        return;
+      }
+      if(!isManualLanguage(chosen))return;
+      manualOverrides.set(original,chosen);
+      language.textContent=chosen.toUpperCase();
+      renderHighlighted(view,{...effectiveCardSettings(preferences),...data,language:chosen,
+        theme:THEMES.includes(data.theme)?data.theme:preferences.theme});
+      status.textContent=isLowMode(preferences)?'Low Mode · Texto íntegro':'Lenguaje elegido manualmente · Copiable';
+    });
+    head.append(fileIcon,label,language,picker);
     const view=document.createElement('div');view.className='codeview';view.style.setProperty('--cb-max-height',preferences.maxHeight+'px');
     renderHighlighted(view,{...effectiveCardSettings(preferences),...data,theme:THEMES.includes(data.theme)?data.theme:preferences.theme});
     const tools=document.createElement('div');tools.className='tools';
@@ -232,11 +284,57 @@ if (window.__CODEBRIDGE_ON__) {
     }
     updateGlassModes();
   }
+  // One transient, delegated control for unsupported fragments, not a button
+  // added to every message in a chat. User-initiated conversion is always local.
+  function clearManualPicker(){
+    if(manualPicker)manualPicker.remove();
+    if(manualBubble && manualBubble.isConnected)manualBubble.style.position=manualPreviousPosition;
+    manualPicker=null;manualBubble=null;manualPreviousPosition='';
+  }
+  function exposeManualPicker(bubble){
+    if(!active||!bubble||!bubble.isConnected)return;
+    if(manualBubble===bubble)return;
+    const original=originalNode(bubble);
+    if(!original || states.has(original) || original.textContent.trim().length<8 || original.textContent.length>MAX_CHAT_TEXT) {
+      clearManualPicker();return;
+    }
+    clearManualPicker();
+    const picker=document.createElement('select');picker.className='codebridge-manual-picker';
+    picker.setAttribute('aria-label','CodeBridge: convertir este mensaje en código');
+    picker.style.cssText='position:absolute;right:4px;top:3px;z-index:10;max-width:175px;background:#292725;color:#fff;border:1px solid #f58136;border-radius:9px;padding:5px;font:600 11px system-ui;box-shadow:0 2px 10px #0006;cursor:pointer';
+    const hint=document.createElement('option');hint.value='';hint.textContent='</> Ver como código…';picker.appendChild(hint);
+    for(const [id,name] of MANUAL_LANGUAGES){const option=document.createElement('option');option.value=id;option.textContent=name;picker.appendChild(option);}
+    picker.addEventListener('pointerdown',event=>event.stopPropagation());
+    picker.addEventListener('click',event=>event.stopPropagation());
+    picker.addEventListener('change',event=>{
+      event.stopPropagation();const chosen=picker.value;
+      if(!isManualLanguage(chosen))return;
+      manualOverrides.set(original,chosen);clearManualPicker();queueBubble(bubble);
+    });
+    manualBubble=bubble;manualPicker=picker;manualPreviousPosition=bubble.style.position;
+    if(getComputedStyle(bubble).position==='static')bubble.style.position='relative';
+    bubble.appendChild(picker);
+  }
+  function onBubblePointer(event){
+    if(event.target?.closest?.('.codebridge-host, .codebridge-manual-picker'))return;
+    const bubble=bubbleOf(event.target);
+    if(bubble)exposeManualPicker(bubble);
+  }
+  function onBubbleLeave(event){
+    if(!manualBubble)return;
+    const from=bubbleOf(event.target);
+    if(from!==manualBubble)return;
+    const to=event.relatedTarget;
+    if(to instanceof Node && manualBubble.contains(to))return;
+    clearManualPicker();
+  }
+  observerRoot.addEventListener('pointerover',onBubblePointer);
+  observerRoot.addEventListener('pointerout',onBubbleLeave);
   // Incremental observation: schedule only bubbles touched by DOM changes.
   // The initial scan and explicit reload still inspect all currently mounted messages.
   function bubbleOf(node){
     const element=node.nodeType===Node.ELEMENT_NODE?node:node.parentElement;
-    if(!element||element.closest('.codebridge-host'))return null;
+    if(!element||element.closest('.codebridge-host, .codebridge-manual-picker'))return null;
     return element.closest(BUBBLES);
   }
   function queueBubble(bubble){
@@ -306,8 +404,13 @@ if (window.__CODEBRIDGE_ON__) {
     profile:preferences.performanceProfile,active
   });
   const onDiagnosticMessage=(request,sender,sendResponse)=>{
-    if(!request||!['codebridge:diagnostics:get','codebridge:diagnostics:reset'].includes(request.type))return false;
+    if(!request||!['codebridge:diagnostics:get','codebridge:diagnostics:reset','codebridge:clipboard:prepared'].includes(request.type))return false;
     if(sender?.id&&sender.id!==chrome.runtime?.id)return false;
+    if(request.type==='codebridge:clipboard:prepared'){
+      onClipboardPrepared();
+      sendResponse({ok:true});
+      return false;
+    }
     if(request.type==='codebridge:diagnostics:reset')diagnostics.reset();
     sendResponse({ok:true,diagnostics:diagnosticSnapshot()});
     return false;
@@ -316,8 +419,11 @@ if (window.__CODEBRIDGE_ON__) {
   const observer=new MutationObserver(onMutations);
   observer.observe(observerRoot,{childList:true,characterData:true,subtree:true});
   const onStorage=(changes,area)=>{
-    if(area!=='local'||!Object.keys(DEFAULT_PREFERENCES).some(k=>changes[k]))return;
-    void loadPrefs();
+    if(area!=='local')return;
+    if(changes[CLIPBOARD_NOTICE_KEY]?.newValue){
+      onClipboardPrepared();
+    }
+    if(Object.keys(DEFAULT_PREFERENCES).some(k=>changes[k]))void loadPrefs();
   };
   const onSystemTheme=()=>{
     if(preferences.uiMode!=='auto')return;
@@ -329,12 +435,16 @@ if (window.__CODEBRIDGE_ON__) {
   function disable(){
     if(!active)return;active=false;observer.disconnect();clearTimeout(timer);
     for(const id of retryTimers)clearTimeout(id);retryTimers.clear();
-    pendingBubbles.clear();document.removeEventListener('codebridge:rescan',onRescan);
+    pendingBubbles.clear();clearManualPicker();
+    clearLegacyPasteNotice();
+    observerRoot.removeEventListener('pointerover',onBubblePointer);
+    observerRoot.removeEventListener('pointerout',onBubbleLeave);
+    document.removeEventListener('codebridge:rescan',onRescan);
     document.removeEventListener('codebridge:disable',disable);
     chrome.storage?.onChanged?.removeListener(onStorage);
     chrome.runtime?.onMessage?.removeListener(onDiagnosticMessage);
     mediaQuery?.removeEventListener?.('change',onSystemTheme);
-    resetCards();window.__CODEBRIDGE_ON__=false;
+    resetCards();window.__CODEBRIDGE_ON__=false;delete window.__CODEBRIDGE_CONTENT_VERSION;
   }
   document.addEventListener('codebridge:rescan',onRescan);
   document.addEventListener('codebridge:disable',disable);

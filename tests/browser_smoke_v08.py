@@ -18,7 +18,7 @@ with sync_playwright() as p:
       window.__prefs={performanceProfile:'balanced',uiMode:'dark',theme:'dracula',lineNumbers:true,wrap:false,fontSize:13,maxHeight:420,glassBlur:20,glassOpacity:80,glassCards:true};
       window.chrome={storage:{local:{get:async keys=>Object.fromEntries(keys.map(k=>[k,window.__prefs[k]])),set:async data=>Object.assign(window.__prefs,data)}},scripting:{getRegisteredContentScripts:async()=>[]},tabs:{query:async()=>[]}};
     }''')
-    source='\n'.join(re.sub(r'^export\s+', '',re.sub(r'^import\s+.*?;\s*$', '',(ROOT/file).read_text(encoding='utf-8'),flags=re.MULTILINE), flags=re.MULTILINE) for file in ['core.js','visual.js','highlight.js','app.js'])
+    source='\n'.join(re.sub(r'^export\s+', '',re.sub(r'^import\s+.*?;\s*$', '',(ROOT/file).read_text(encoding='utf-8'),flags=re.MULTILINE), flags=re.MULTILINE) for file in ['core.js','visual.js','highlight.js','message.js','smart-clipboard.js','app.js'])
     panel.add_script_tag(content=source)
     panel.locator('#preview .cb-code').wait_for()
     assert panel.locator('html').get_attribute('data-performance')=='balanced'

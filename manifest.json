@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "CodeBridge — Código para WhatsApp",
   "short_name": "CodeBridge",
-  "version": "0.9.0",
-  "description": "Código seleccionable en WhatsApp Web: perfiles Equilibrado y Low Mode; protección de contenido y mejoras de rendimiento.",
+  "version": "0.9.7",
+  "description": "Presenta código seleccionable en WhatsApp Web y permite preparar fragmentos en el portapapeles con permiso opcional.",
   "minimum_chrome_version": "114",
   "permissions": [
     "sidePanel",
@@ -34,5 +34,9 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "optional_permissions": [
+    "clipboardRead"
+  ],
+  "version_name": "1.0 RC1"
 }

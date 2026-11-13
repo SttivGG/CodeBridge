@@ -5,7 +5,7 @@
  */
 export const DIAGNOSTIC_EVENTS = Object.freeze([
   'inspected', 'rendered', 'restored', 'detached', 'expansion',
-  'oversized', 'copySuccess', 'copyFailure', 'renderFailure'
+  'oversized', 'copySuccess', 'copyFailure', 'renderFailure', 'safePaste', 'safePasteFailure'
 ]);
 const EVENT_SET = new Set(DIAGNOSTIC_EVENTS);
 const MAX_SAMPLES = 128;

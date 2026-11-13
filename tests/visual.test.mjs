@@ -12,7 +12,7 @@ test('Nexo panel defaults remain safe and reproducible',()=>{
 test('preferences reject malformed storage values',()=>{
   assert.deepEqual(normalizePreferences({uiMode:'rainbow',theme:'unsafe',wrap:'yes',fontSize:'999',maxHeight:Infinity}),DEFAULT_PREFERENCES);
   const configured=normalizePreferences({uiMode:'dark',theme:'dracula',wrap:true,lineNumbers:false,fontSize:22,maxHeight:165});
-  assert.deepEqual(configured,{uiMode:'dark',performanceProfile:'balanced',theme:'dracula',wrap:true,lineNumbers:false,fontSize:17,maxHeight:260,glassBlur:18,glassOpacity:75,glassCards:true});
+  assert.deepEqual(configured,{uiMode:'dark',performanceProfile:'balanced',theme:'dracula',wrap:true,lineNumbers:false,fontSize:17,maxHeight:260,glassBlur:18,glassOpacity:75,glassCards:true,safePaste:true});
 });
 test('large code falls back to compact mode without truncation',()=>{
   assert.equal(compactRenderRequired('public class Hola {}'),false);

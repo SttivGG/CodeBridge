@@ -1,6 +1,7 @@
 import {THEMES} from './core.js';
 import {renderHighlighted} from './highlight.js';
 import {normalizePreferences, DEFAULT_PREFERENCES, resolveUiMode} from './visual.js';
+import {planSmartClipboard, SMART_LANGUAGE_CHOICES} from './smart-clipboard.js';
 const $=id=>document.getElementById(id);
 const SCRIPT_ID='codebridge-whatsapp-v09';
 const EXAMPLE=`public record Factura(Long id, String numeroFactura, UUID clienteId) {
@@ -123,7 +124,176 @@ async function copyDiagnostics(){
   try{await navigator.clipboard.writeText(JSON.stringify(report,null,2));$('diagnostic-state').textContent='Informe numérico copiado. No contiene conversaciones.';}
   catch{$('diagnostic-state').textContent='No se pudo copiar. Revisa los permisos del portapapeles.';}
 }
+/**
+ * Aviso sin datos: sincroniza la preparación con los avisos temporales de
+ * WhatsApp Web. No se transmite código, texto del portapapeles ni hashes.
+ * Si una pestaña no tiene CodeBridge activo, su error no bloquea el pegado.
+ */
+const CLIPBOARD_NOTICE_KEY='codebridge.smartClipboardPreparedNotice';
+/**
+ * Aviso de control, sin código fuente: un cambio de chrome.storage.local llega a
+ * los content scripts activos incluso cuando tabs.query/sendMessage no funciona.
+ * El valor es un nonce efímero (NO identifica el mensaje ni su contenido).
+ * El aviso no modifica el portapapeles ni el editor de WhatsApp.
+ */
+async function notifyPreparedInWhatsapp(){
+  try{
+    await chrome.storage.local.set({[CLIPBOARD_NOTICE_KEY]:`${Date.now()}:${Math.random()}`});
+  }catch{/* El portapapeles queda protegido aunque no se pueda avisar al chat. */}
+  // Mantener una notificación directa como optimización, sin depender de ella.
+  try{
+    const tabs=await chrome.tabs.query({url:['https://web.whatsapp.com/*']});
+    await Promise.allSettled(tabs.filter(tab=>Number.isInteger(tab.id)).map(tab=>
+      chrome.tabs.sendMessage(tab.id,{type:'codebridge:clipboard:prepared'})
+    ));
+  }catch{/* Posible ausencia de permiso/recarga; storage.onChanged es el respaldo. */}
+}
+/**
+ * Smart Clipboard no toca el editor de WhatsApp. Si Brave/Chrome/Edge no permiten
+ * verificar una lectura, muestra un control local de copia explícita.
+ */
+const smartStatus=()=>$('smart-status');
+const smartCopyBox=()=>$('smart-copy-fallback');
+const smartManualBox=()=>$('smart-manual-section');
+function openManualEditor(message){
+  smartManualBox().hidden=false;
+  if(message)smartStatus().textContent=message;
+}
+function presentProtectedText(value){
+  smartCopyBox().hidden=false;
+  $('smart-protected-text').value=value;
+}
+function clearTemporaryCode(){
+  $('smart-manual-input').value='';
+  $('smart-protected-text').value='';
+  smartCopyBox().hidden=true;
+}
+function planErrorMessage(code){
+  return ({
+    empty:'El portapapeles o el campo de código está vacío.',
+    oversized:'El fragmento supera el límite admitido. No se modificó el portapapeles.',
+    ambiguous:'El texto contiene delimitadores de código ambiguos. No se modificó.',
+    unrecognized:'No pude reconocer el fragmento. Selecciona su lenguaje y vuelve a intentarlo.',
+    'integrity-failed':'Falló la comparación exacta antes de copiar. No se modificó.',
+    'invalid-language':'El lenguaje elegido no está admitido.'
+  })[code]||'No se pudo preparar este código.';
+}
+function preparedPlanFor(source){
+  const plan=planSmartClipboard(source,$('smart-language').value);
+  if(plan.status==='ready')return {ok:true,plan};
+  if(plan.status==='already-protected')return {ok:true,plan:{...plan,protectedText:source}};
+  smartStatus().textContent=planErrorMessage(plan.status);
+  return {ok:false};
+}
+/** Copia originada en un clic REAL, sin esperar permisos o lectura antes de copiar. */
+function copyProtectedSelection(){
+  const field=$('smart-protected-text');
+  if(!field.value){smartStatus().textContent='Primero prepara un fragmento.';return false;}
+  field.focus();field.select();
+  let copied=false;
+  try{copied=Boolean(document.execCommand?.('copy'));}catch{/* browser may block legacy copy */}
+  if(copied){
+    smartStatus().textContent='Copia protegida solicitada mediante el botón. Regresa a WhatsApp y pega con Ctrl+V; comprueba los guiones bajos antes de enviar.';
+    void notifyPreparedInWhatsapp();
+  }else{
+    // Keep the protected text selected: the user can press Ctrl+C manually.
+    smartStatus().textContent='El navegador bloqueó la copia automática. El texto protegido está seleccionado: pulsa Ctrl+C y luego Ctrl+V en WhatsApp.';
+  }
+  return copied;
+}
+/** If clipboard APIs are unavailable, a genuine paste event in this field is sufficient. */
+function prepareManualCode(){
+  const source=$('smart-manual-input').value;
+  const result=preparedPlanFor(source);
+  if(!result.ok)return;
+  const protectedText=result.plan.protectedText;
+  presentProtectedText(protectedText);
+  $('smart-manual-input').value='';
+  copyProtectedSelection();
+}
+/** Lectura exclusivamente por clic, sin observación continua del portapapeles. */
+/**
+ * Una pulsación prepara el portapapeles cuando el navegador permite lectura y
+ * escritura. Importante: un readText() INMEDIATO tras writeText() no es una
+ * confirmación fiable en todos los navegadores: puede devolver datos antiguos
+ * o lanzar NotAllowedError pese a que la escritura finalizó correctamente.
+ * Solo se anuncia éxito si writeText() se resuelve; nunca se llama "verificado".
+ */
+async function prepareClipboard(){
+  const button=$('smart-prepare');
+  const message=smartStatus();
+  if(button.disabled)return;
+  button.disabled=true;
+  message.textContent='Preparando código del portapapeles…';
+  try{
+    // No volver a abrir el diálogo de permisos cuando ya está autorizado.
+    let granted=false;
+    try{granted=await chrome.permissions.contains({permissions:['clipboardRead']});}
+    catch{/* En navegadores sin contains, usamos el diálogo convencional. */}
+    if(!granted){
+      try{granted=await chrome.permissions.request({permissions:['clipboardRead']});}
+      catch{granted=false;}
+    }
+    if(!granted||!navigator.clipboard?.readText){
+      openManualEditor('Permiso rechazado o lectura no disponible. Pega el código en el campo local y pulsa «Proteger y copiar».');
+      return;
+    }
+    let source;
+    try{source=await navigator.clipboard.readText();}
+    catch{
+      openManualEditor('El navegador bloqueó la lectura del portapapeles. Usa el campo local de copia protegida.');
+      return;
+    }
+    const result=preparedPlanFor(source);
+    if(!result.ok)return;
+    const plan=result.plan;
+    if(plan.status==='already-protected'){
+      clearTemporaryCode();
+      message.textContent='El portapapeles ya está protegido. Pégalo con Ctrl+V.';
+      void notifyPreparedInWhatsapp();
+      return;
+    }
+    // Si el navegador rechaza la escritura, ofrecer copia explícita. No se
+    // modifica el editor de WhatsApp ni se declara éxito sobre una excepción.
+    try{
+      await navigator.clipboard.writeText(plan.protectedText);
+    }catch{
+      presentProtectedText(plan.protectedText);
+      message.textContent='El navegador rechazó la escritura. Pulsa «Copiar código protegido» o selecciona el texto y usa Ctrl+C.';
+      return;
+    }
+    // El resolved Promise confirma que el navegador aceptó la escritura; NO
+    // garantiza que un gestor de portapapeles externo no la modifique luego.
+    // No se hace una segunda lectura, que provocaba el falso fallo del primer clic.
+    clearTemporaryCode();
+    message.textContent=`Código ${plan.language.toUpperCase()} preparado en un clic. Pégalo con Ctrl+V y comprueba el resultado antes de enviarlo.`;
+    void notifyPreparedInWhatsapp();
+  }catch{
+    openManualEditor('No fue posible acceder al portapapeles automáticamente. Pega el código en el campo local.');
+  }finally{button.disabled=false;}
+}
+async function revokeClipboard(){
+  try{
+    const removed=await chrome.permissions.remove({permissions:['clipboardRead']});
+    $('smart-status').textContent=removed?'Permiso de lectura revocado. Smart Clipboard no volverá a leer sin tu autorización.':'El permiso de lectura ya estaba desactivado.';
+  }catch{$('smart-status').textContent='No se pudo revocar aquí. Puedes gestionarlo en la configuración de la extensión.';}
+}
 async function main(){
+  const langSelect=$('smart-language');
+  for(const [value,label] of SMART_LANGUAGE_CHOICES){
+    if(value==='auto')continue;
+    const option=document.createElement('option');option.value=value;option.textContent=label;langSelect.append(option);
+  }
+  $('smart-prepare').addEventListener('click',()=>{void prepareClipboard();});
+  $('smart-manual-toggle').addEventListener('click',()=>{openManualEditor('Pega aquí el código y pulsa «Proteger y copiar».');$('smart-manual-input').focus();});
+  $('smart-manual-prepare').addEventListener('click',prepareManualCode);
+  $('smart-manual-clear').addEventListener('click',()=>{clearTemporaryCode();smartStatus().textContent='Texto temporal borrado del panel.';});
+  $('smart-retry-copy').addEventListener('click',copyProtectedSelection);
+  $('smart-select-copy').addEventListener('click',()=>{$('smart-protected-text').focus();$('smart-protected-text').select();smartStatus().textContent='Texto protegido seleccionado. Pulsa Ctrl+C y pégalo en WhatsApp con Ctrl+V.';});
+  const installedVersion=chrome.runtime?.getManifest?.()?.version||'desconocida';
+  $('codebridge-version').textContent='v'+installedVersion;
+  document.title='CodeBridge · v'+installedVersion;
+  $('smart-revoke').addEventListener('click',()=>{void revokeClipboard();});
   $('activate-wa').addEventListener('click',activate);
   $('diag-refresh').addEventListener('click',()=>{void refreshDiagnostics();});
   $('diag-reset').addEventListener('click',()=>{void refreshDiagnostics(true);});

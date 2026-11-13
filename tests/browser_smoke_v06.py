@@ -24,7 +24,7 @@ try:
     panel.add_style_tag(content=(ROOT/'styles.css').read_text(encoding='utf-8'))
     panel.evaluate("""() => { window.__settings={uiMode:'light',theme:'dark-plus',fontSize:13,maxHeight:420,lineNumbers:true,wrap:false};window.chrome={storage:{local:{get:async keys=>Object.fromEntries(keys.map(k=>[k,window.__settings[k]])),set:async data=>Object.assign(window.__settings,data)}},scripting:{getRegisteredContentScripts:async()=>[]},tabs:{query:async()=>[]}};}""")
     import re
-    panel_code='\n'.join(re.sub(r'^export\s+', '',re.sub(r'^import\s+.*?;\s*$', '',(ROOT/file).read_text(encoding='utf-8'),flags=re.MULTILINE), flags=re.MULTILINE) for file in ['core.js','visual.js','highlight.js','app.js'])
+    panel_code='\n'.join(re.sub(r'^export\s+', '',re.sub(r'^import\s+.*?;\s*$', '',(ROOT/file).read_text(encoding='utf-8'),flags=re.MULTILINE), flags=re.MULTILINE) for file in ['core.js','visual.js','highlight.js','message.js','smart-clipboard.js','app.js'])
     panel.add_script_tag(content=panel_code)
     panel.locator('#preview .cb-code').wait_for(timeout=8000)
     assert panel.locator('#appearance-title').inner_text().startswith('A tu manera')

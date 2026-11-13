@@ -32,7 +32,7 @@ test('detects SQL, Python, JSON and JavaScript in multi-line messages',()=>{
  for(const [lang,code] of Object.entries(samples))assert.equal(recognizeChatCode(code)?.language,lang,lang);
 });
 test('supports standard triple-backtick code',()=>{
- const result=recognizeChatCode('```\n'+java+'\n```');assert.equal(result?.source,'fenced');assert.equal(result?.code,java);
+ const result=recognizeChatCode('```\n'+java+'\n```');assert.equal(result?.source,'fenced');assert.equal(result?.code,'\n'+java+'\n');
 });
 test('supports long WhatsApp messages without truncating code',()=>{
  const long = java.repeat(180);

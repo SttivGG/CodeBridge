@@ -93,3 +93,12 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 .diagnostic-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:11px}
 .diagnostic-actions .button{font-size:11px;min-height:36px;padding:7px 9px}
 @media(max-width:480px){.diagnostics-panel{padding:17px}}
+
+/* Smart Clipboard: edición temporal local y recuperación cuando el navegador bloquea lectura. */
+#smart-manual-section[hidden], #smart-copy-fallback[hidden] { display:none!important; }
+#smart-manual-section textarea, #smart-copy-fallback textarea {
+  width:100%; min-width:0; box-sizing:border-box; padding:12px; min-height:96px;
+  font:12px/1.5 Consolas, 'Cascadia Code',monospace; resize:vertical;
+  border:1px solid var(--border-strong);border-radius:12px;
+  color:var(--text);background:var(--input);white-space:pre;
+}
